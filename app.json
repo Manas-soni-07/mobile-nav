@@ -1,17 +1,26 @@
 {
   "expo": {
-    "name": "mobile-ap",
-    "slug": "mobile-ap",
+    "name": "ResortOS",
+    "slug": "resort-os",
+    "scheme": "resortos",
+    "description": "Executive Hospitality Management System & Multi-Property Operational ERP",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#0F2942"
+    },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.resortos.mobile"
     },
     "android": {
+      "package": "com.resortos.mobile",
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
+        "backgroundColor": "#0F2942",
         "foregroundImage": "./assets/android-icon-foreground.png",
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
