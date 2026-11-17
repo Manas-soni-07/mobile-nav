@@ -1,6 +1,6 @@
 /**
- * ResortOS - Hotel Data Constants & Defaults
- * Preserves legacy mock fixtures while exposing the primary initial datasets.
+ * ResortOS - Hotel Data Constants & Defaults (Indian App Edition)
+ * Preserves legacy mock fixtures while exposing the primary initial datasets in INR (₹).
  */
 
 import {
@@ -31,7 +31,7 @@ export {
   INITIAL_EXPENSES,
 };
 
-// Aliased exports for Phase 1 backwards compatibility
+// Aliased exports for backwards compatibility
 export const HOTELS: HotelSummary[] = INITIAL_HOTELS;
 
 export const MOCK_KPIS: DashboardKPIs = {
@@ -55,34 +55,34 @@ export const MOCK_ATTENDANCE: AttendanceSummary = {
 
 export const MOCK_ADVANCE_BOOKING: AdvanceBookingSummary = {
   upcomingCount: 34,
-  confirmedRevenue: '$48,250',
+  confirmedRevenue: '₹4,82,500',
   next7DaysArrivals: 22,
 };
 
 export const MOCK_BILLING: BillingSummary = {
   pendingInvoices: 9,
-  todaySettlements: '$14,890',
-  outstandingBalance: '$3,420',
+  todaySettlements: '₹2,90,280',
+  outstandingBalance: '₹28,244',
 };
 
 export const MOCK_EXPENSES: DailyExpensesSummary = {
-  todayTotal: '$4,120',
+  todayTotal: '₹1,05,200',
   categories: [
-    { name: 'F&B Provisions', amount: '$1,850' },
-    { name: 'Housekeeping Supplies', amount: '$920' },
-    { name: 'Utilities & Maintenance', amount: '$1,350' },
+    { name: 'F&B Provisions', amount: '₹48,500' },
+    { name: 'Housekeeping Supplies', amount: '₹24,200' },
+    { name: 'Utilities & Maintenance', amount: '₹32,500' },
   ],
 };
 
 export const MOCK_DAILY_SUMMARY: DailySummaryData = {
-  grossRevenue: '$38,650',
-  revPar: '$242.00',
-  adr: '$372.50',
-  netOperatingIncome: '$22,480',
+  grossRevenue: '₹5,75,400',
+  revPar: '₹4,795.00',
+  adr: '₹7,376.92',
+  netOperatingIncome: '₹4,70,200',
   occupancyRate: '65.0%',
-  rawGrossRevenue: 38650,
-  rawNetIncome: 22480,
-  rawExpenses: 16170,
+  rawGrossRevenue: 575400,
+  rawNetIncome: 470200,
+  rawExpenses: 105200,
 };
 
 export const OPERATIONAL_MODULES: OperationalModule[] = [
@@ -113,9 +113,9 @@ export const OPERATIONAL_MODULES: OperationalModule[] = [
   {
     id: 'mod-billing',
     title: 'Billing & Folios',
-    subtitle: '$14,890 settled today across 28 folios',
+    subtitle: '₹2.9 L settled today across 28 folios',
     icon: 'receipt',
-    badge: '$14.8k',
+    badge: '₹2.9 L',
     badgeColor: 'info',
   },
   {
@@ -123,7 +123,7 @@ export const OPERATIONAL_MODULES: OperationalModule[] = [
     title: 'Daily Expenses',
     subtitle: '3 operational expense batches logged',
     icon: 'dollar-sign',
-    badge: '$4,120',
+    badge: '₹1.05 L',
     badgeColor: 'warning',
   },
   {

@@ -30,7 +30,7 @@ export const BillingFoliosModal: React.FC<BillingFoliosModalProps> = ({
   const [expandedFolioId, setExpandedFolioId] = useState<string | null>(null);
 
   const handleSettle = (folioId: string) => {
-    settleFolio(folioId, 'Credit Card (Terminal)');
+    settleFolio(folioId, 'UPI (Google Pay / PhonePe QR)');
   };
 
   return (
@@ -137,7 +137,7 @@ export const BillingFoliosModal: React.FC<BillingFoliosModalProps> = ({
 
                     <View style={styles.divider} />
                     <View style={styles.calcRow}>
-                      <Text style={styles.calcLabel}>Tax & Service Fees:</Text>
+                      <Text style={styles.calcLabel}>GST (18% CGST + SGST):</Text>
                       <Text style={styles.calcVal}>{formatCurrency(folio.taxAmount)}</Text>
                     </View>
                     <View style={styles.calcRow}>
@@ -163,7 +163,7 @@ export const BillingFoliosModal: React.FC<BillingFoliosModalProps> = ({
 
                     {!isSettled && (
                       <Button
-                        title="Settle Folio via Card"
+                        title="Settle Folio via UPI"
                         variant="primary"
                         size="sm"
                         icon="check-circle"

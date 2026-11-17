@@ -42,15 +42,15 @@ export const AdvanceBookingModal: React.FC<AdvanceBookingModalProps> = ({
     }
 
     const nightsNum = parseInt(nights, 10) || 3;
-    const rate = 350;
+    const rate = 14500;
     const totalAmount = nightsNum * rate;
 
     createBooking({
       hotelId: selectedHotel.id,
       guestName: guestName.trim(),
-      guestPhone: '+1 (555) 000-1122',
-      guestEmail: `${guestName.toLowerCase().replace(/\s+/g, '.')}@guest.com`,
-      roomCategory: 'Deluxe Ocean Suite',
+      guestPhone: '+91 98201 11223',
+      guestEmail: `${guestName.toLowerCase().replace(/\s+/g, '.')}@guest.in`,
+      roomCategory: 'Deluxe Lake View Suite',
       checkInDate: '2026-11-20',
       checkOutDate: '2026-11-23',
       nightsCount: nightsNum,

@@ -8,7 +8,7 @@ import { colors } from './src/theme/colors';
 
 export default function App() {
   return (
-    <HotelProvider initialHotelId="h-1">
+    <HotelProvider initialHotelId="h-villa">
       <NavigationProvider initialScreen="splash">
         <View style={styles.container}>
           <MainAppNavigator />

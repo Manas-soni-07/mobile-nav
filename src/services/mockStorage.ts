@@ -10,6 +10,15 @@ import {
   StaffMember,
   BillingFolio,
   ExpenseRecord,
+  BanquetEvent,
+  DiningOrder,
+  DiningOrderItem,
+  HousekeepingTicket,
+  SpaTreatment,
+  SpaBooking,
+  ExcursionPackage,
+  ConciergeBooking,
+  ShiftHandover,
 } from '../types/hotel';
 import {
   INITIAL_HOTELS,
@@ -18,6 +27,15 @@ import {
   INITIAL_STAFF,
   INITIAL_FOLIOS,
   INITIAL_EXPENSES,
+  INITIAL_BANQUETS,
+  INITIAL_DINING_ORDERS,
+  INITIAL_MENU_CATALOG,
+  INITIAL_HOUSEKEEPING_TICKETS,
+  INITIAL_SPA_TREATMENTS,
+  INITIAL_SPA_BOOKINGS,
+  INITIAL_EXCURSION_PACKAGES,
+  INITIAL_CONCIERGE_BOOKINGS,
+  INITIAL_SHIFT_HANDOVERS,
 } from '../constants/mockDatabase';
 
 class MockStorage {
@@ -27,6 +45,15 @@ class MockStorage {
   private staff: StaffMember[] = [];
   private folios: BillingFolio[] = [];
   private expenses: ExpenseRecord[] = [];
+  private banquets: BanquetEvent[] = [];
+  private diningOrders: DiningOrder[] = [];
+  private housekeepingTickets: HousekeepingTicket[] = [];
+  private menuCatalog: DiningOrderItem[] = [];
+  private spaTreatments: SpaTreatment[] = [];
+  private spaBookings: SpaBooking[] = [];
+  private excursions: ExcursionPackage[] = [];
+  private conciergeBookings: ConciergeBooking[] = [];
+  private shiftHandovers: ShiftHandover[] = [];
 
   constructor() {
     this.reset();
@@ -40,6 +67,15 @@ class MockStorage {
     this.staff = JSON.parse(JSON.stringify(INITIAL_STAFF));
     this.folios = JSON.parse(JSON.stringify(INITIAL_FOLIOS));
     this.expenses = JSON.parse(JSON.stringify(INITIAL_EXPENSES));
+    this.banquets = JSON.parse(JSON.stringify(INITIAL_BANQUETS));
+    this.diningOrders = JSON.parse(JSON.stringify(INITIAL_DINING_ORDERS));
+    this.housekeepingTickets = JSON.parse(JSON.stringify(INITIAL_HOUSEKEEPING_TICKETS));
+    this.menuCatalog = JSON.parse(JSON.stringify(INITIAL_MENU_CATALOG));
+    this.spaTreatments = JSON.parse(JSON.stringify(INITIAL_SPA_TREATMENTS));
+    this.spaBookings = JSON.parse(JSON.stringify(INITIAL_SPA_BOOKINGS));
+    this.excursions = JSON.parse(JSON.stringify(INITIAL_EXCURSION_PACKAGES));
+    this.conciergeBookings = JSON.parse(JSON.stringify(INITIAL_CONCIERGE_BOOKINGS));
+    this.shiftHandovers = JSON.parse(JSON.stringify(INITIAL_SHIFT_HANDOVERS));
   }
 
   // --- Hotels ---
@@ -157,6 +193,141 @@ class MockStorage {
   public addExpense(expense: ExpenseRecord): ExpenseRecord {
     this.expenses.unshift(expense);
     return expense;
+  }
+
+  // --- Banquets & Events ---
+  public getBanquets(hotelId?: string): BanquetEvent[] {
+    if (hotelId) {
+      return this.banquets.filter((e) => e.hotelId === hotelId);
+    }
+    return [...this.banquets];
+  }
+
+  public addBanquet(event: BanquetEvent): BanquetEvent {
+    this.banquets.unshift(event);
+    return event;
+  }
+
+  public updateBanquet(id: string, updates: Partial<BanquetEvent>): BanquetEvent | undefined {
+    const index = this.banquets.findIndex((e) => e.id === id);
+    if (index !== -1) {
+      this.banquets[index] = { ...this.banquets[index], ...updates };
+      return this.banquets[index];
+    }
+    return undefined;
+  }
+
+  // --- In-Room Dining & KOT ---
+  public getDiningOrders(hotelId?: string): DiningOrder[] {
+    if (hotelId) {
+      return this.diningOrders.filter((o) => o.hotelId === hotelId);
+    }
+    return [...this.diningOrders];
+  }
+
+  public addDiningOrder(order: DiningOrder): DiningOrder {
+    this.diningOrders.unshift(order);
+    return order;
+  }
+
+  public updateDiningOrder(id: string, updates: Partial<DiningOrder>): DiningOrder | undefined {
+    const index = this.diningOrders.findIndex((o) => o.id === id);
+    if (index !== -1) {
+      this.diningOrders[index] = { ...this.diningOrders[index], ...updates };
+      return this.diningOrders[index];
+    }
+    return undefined;
+  }
+
+  public getMenuCatalog(): DiningOrderItem[] {
+    return [...this.menuCatalog];
+  }
+
+  // --- Housekeeping & Maintenance Tickets ---
+  public getHousekeepingTickets(hotelId?: string): HousekeepingTicket[] {
+    if (hotelId) {
+      return this.housekeepingTickets.filter((t) => t.hotelId === hotelId);
+    }
+    return [...this.housekeepingTickets];
+  }
+
+  public addHousekeepingTicket(ticket: HousekeepingTicket): HousekeepingTicket {
+    this.housekeepingTickets.unshift(ticket);
+    return ticket;
+  }
+
+  public updateHousekeepingTicket(id: string, updates: Partial<HousekeepingTicket>): HousekeepingTicket | undefined {
+    const index = this.housekeepingTickets.findIndex((t) => t.id === id);
+    if (index !== -1) {
+      this.housekeepingTickets[index] = { ...this.housekeepingTickets[index], ...updates };
+      return this.housekeepingTickets[index];
+    }
+    return undefined;
+  }
+
+  // --- Phase 6: Ayurvedic Spa & Wellness Retreat ---
+  public getSpaTreatments(): SpaTreatment[] {
+    return [...this.spaTreatments];
+  }
+
+  public getSpaBookings(hotelId?: string): SpaBooking[] {
+    if (hotelId) {
+      return this.spaBookings.filter((b) => b.hotelId === hotelId);
+    }
+    return [...this.spaBookings];
+  }
+
+  public addSpaBooking(booking: SpaBooking): SpaBooking {
+    this.spaBookings.unshift(booking);
+    return booking;
+  }
+
+  public updateSpaBooking(id: string, updates: Partial<SpaBooking>): SpaBooking | undefined {
+    const index = this.spaBookings.findIndex((b) => b.id === id);
+    if (index !== -1) {
+      this.spaBookings[index] = { ...this.spaBookings[index], ...updates };
+      return this.spaBookings[index];
+    }
+    return undefined;
+  }
+
+  // --- Phase 6: Royal Concierge & Excursions ---
+  public getExcursions(): ExcursionPackage[] {
+    return [...this.excursions];
+  }
+
+  public getConciergeBookings(hotelId?: string): ConciergeBooking[] {
+    if (hotelId) {
+      return this.conciergeBookings.filter((b) => b.hotelId === hotelId);
+    }
+    return [...this.conciergeBookings];
+  }
+
+  public addConciergeBooking(booking: ConciergeBooking): ConciergeBooking {
+    this.conciergeBookings.unshift(booking);
+    return booking;
+  }
+
+  public updateConciergeBooking(id: string, updates: Partial<ConciergeBooking>): ConciergeBooking | undefined {
+    const index = this.conciergeBookings.findIndex((b) => b.id === id);
+    if (index !== -1) {
+      this.conciergeBookings[index] = { ...this.conciergeBookings[index], ...updates };
+      return this.conciergeBookings[index];
+    }
+    return undefined;
+  }
+
+  // --- Phase 6: Shift Handover & Audit Logs ---
+  public getShiftHandovers(hotelId?: string): ShiftHandover[] {
+    if (hotelId) {
+      return this.shiftHandovers.filter((s) => s.hotelId === hotelId);
+    }
+    return [...this.shiftHandovers];
+  }
+
+  public addShiftHandover(handover: ShiftHandover): ShiftHandover {
+    this.shiftHandovers.unshift(handover);
+    return handover;
   }
 }
 

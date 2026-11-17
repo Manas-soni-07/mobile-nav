@@ -1,3 +1,9 @@
+/**
+ * ResortOS - Advance Booking & Event Room Allocation Module
+ * Unified reservations console supporting Normal Room Bookings and
+ * Event Room Bookings (Required vs Allocated vs Remaining room tracking).
+ */
+
 import React, { useState, useMemo } from 'react';
 import {
   View,
@@ -15,101 +21,172 @@ import { spacing, borderRadius, shadows } from '../theme/spacing';
 import { useNavigation } from '../hooks/useNavigation';
 import { useHotel } from '../hooks/useHotel';
 import { Header } from '../components/common/Header';
+import { Card } from '../components/common/Card';
 import { Input } from '../components/common/Input';
 import { Badge } from '../components/common/Badge';
 import { Icon } from '../components/common/Icon';
 import { Button } from '../components/common/Button';
 import { formatCurrency, formatDate } from '../utils/formatters';
-import { BookingStatus, RoomCategory } from '../types/hotel';
+import { Booking } from '../types/hotel';
 
 export const AdvanceBookingScreen: React.FC = () => {
   const { goBack } = useNavigation();
   const {
     bookings,
-    advanceBookingSummary,
+    rooms,
+    selectedHotel,
     createBooking,
     cancelBooking,
-    selectedHotel,
   } = useHotel();
 
+  // Mode: 'normal' vs 'event'
+  const [activeTab, setActiveTab] = useState<'normal' | 'event'>('normal');
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedStatus, setSelectedStatus] = useState<string>('ALL');
-
-  // Add Reservation Modal
   const [showAddModal, setShowAddModal] = useState(false);
+
+  // Form states
+  const [bookingType, setBookingType] = useState<'normal' | 'event'>('normal');
   const [guestName, setGuestName] = useState('');
-  const [guestPhone, setGuestPhone] = useState('');
+  const [guestPhone, setGuestPhone] = useState('+91 ');
   const [guestEmail, setGuestEmail] = useState('');
-  const [category, setCategory] = useState<RoomCategory>('Deluxe Ocean Suite');
-  const [nights, setNights] = useState('4');
+  const [guestAddress, setGuestAddress] = useState('');
+  const [checkInDate, setCheckInDate] = useState('2026-11-20');
+  const [checkOutDate, setCheckOutDate] = useState('2026-11-23');
   const [adults, setAdults] = useState('2');
-  const [specialRequests, setSpecialRequests] = useState('');
+  const [children, setChildren] = useState('0');
+  const [roomType, setRoomType] = useState('Deluxe Room');
+  const [totalRoomsCount, setTotalRoomsCount] = useState('1');
+  const [roomPrice, setRoomPrice] = useState('2500');
+  const [advanceAmount, setAdvanceAmount] = useState('2500');
+  const [paymentMethod, setPaymentMethod] = useState<'Cash' | 'UPI' | 'Card'>('UPI');
+  const [specialNotes, setSpecialNotes] = useState('');
 
-  const statusFilters = ['ALL', 'confirmed', 'checked_in', 'checked_out', 'cancelled'];
+  // Event specific fields
+  const [eventName, setEventName] = useState('');
+  const [requiredRooms, setRequiredRooms] = useState('15');
+  const [allocatedRooms, setAllocatedRooms] = useState('10');
 
-  const roomCategories: RoomCategory[] = [
-    'Deluxe Ocean Suite',
-    'Royal Penthouse',
-    'Executive Villa',
-    'Garden View Villa',
-    'Classic King Suite',
+  // Additional Allocation Modal
+  const [allocateModalVisible, setAllocateModalVisible] = useState(false);
+  const [selectedEventBooking, setSelectedEventBooking] = useState<Booking | null>(null);
+  const [extraRoomsCount, setExtraRoomsCount] = useState('2');
+
+  const roomTypeOptions = [
+    'Deluxe Room',
+    'Super Deluxe Room',
+    'Executive Suite',
+    'Family Suite',
+    'Deluxe AC Room',
+    'Standard Room',
   ];
 
-  const categoryRates: { [cat in RoomCategory]: number } = {
-    'Deluxe Ocean Suite': 350,
-    'Royal Penthouse': 950,
-    'Executive Villa': 550,
-    'Garden View Villa': 420,
-    'Classic King Suite': 280,
-  };
-
+  // Filter bookings
   const filteredBookings = useMemo(() => {
     return bookings.filter((b) => {
+      const isEvent = b.bookingType === 'event' || Boolean(b.eventName);
+      if (activeTab === 'normal' && isEvent) return false;
+      if (activeTab === 'event' && !isEvent) return false;
+
       const matchesSearch =
         b.guestName.toLowerCase().includes(searchQuery.toLowerCase()) ||
         b.bookingReference.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        b.guestEmail.toLowerCase().includes(searchQuery.toLowerCase());
+        (b.eventName && b.eventName.toLowerCase().includes(searchQuery.toLowerCase()));
 
-      const matchesStatus = selectedStatus === 'ALL' || b.status === selectedStatus;
-
-      return matchesSearch && matchesStatus;
+      return matchesSearch;
     });
-  }, [bookings, searchQuery, selectedStatus]);
+  }, [bookings, activeTab, searchQuery]);
 
-  const handleCreateReservation = () => {
+  const openAddModal = (type: 'normal' | 'event') => {
+    setBookingType(type);
+    setGuestName('');
+    setGuestPhone('+91 ');
+    setGuestEmail('');
+    setGuestAddress('');
+    setCheckInDate('2026-11-20');
+    setCheckOutDate('2026-11-23');
+    setAdults(type === 'event' ? '25' : '2');
+    setChildren(type === 'event' ? '5' : '0');
+    setRoomType('Deluxe Room');
+    setTotalRoomsCount(type === 'event' ? '10' : '1');
+    setRoomPrice('2500');
+    setAdvanceAmount(type === 'event' ? '25000' : '2500');
+    setPaymentMethod('UPI');
+    setSpecialNotes('');
+    setEventName(type === 'event' ? 'Mittal Family Wedding' : '');
+    setRequiredRooms('15');
+    setAllocatedRooms('10');
+    setShowAddModal(true);
+  };
+
+  const handleCreateBooking = () => {
     if (!guestName.trim()) {
-      Alert.alert('Required Field', 'Please enter guest full name.');
+      Alert.alert('Required Field', 'Please enter guest / customer name');
+      return;
+    }
+    if (bookingType === 'event' && !eventName.trim()) {
+      Alert.alert('Required Field', 'Please enter event name');
       return;
     }
 
-    const numNights = parseInt(nights, 10) || 3;
-    const numGuests = parseInt(adults, 10) || 2;
-    const rate = categoryRates[category] || 350;
-    const totalAmount = numNights * rate;
-    const depositPaid = Math.round(totalAmount * 0.5);
+    const price = parseFloat(roomPrice) || 2500;
+    const count = parseInt(totalRoomsCount, 10) || 1;
+    const req = parseInt(requiredRooms, 10) || 0;
+    const alloc = parseInt(allocatedRooms, 10) || count;
+    const rem = Math.max(0, req - alloc);
+    const advance = parseFloat(advanceAmount) || 0;
 
     createBooking({
       hotelId: selectedHotel.id,
-      guestName: guestName.trim(),
-      guestPhone: guestPhone.trim() || '+1 (555) 303-9911',
-      guestEmail: guestEmail.trim() || `${guestName.toLowerCase().replace(/\s+/g, '.')}@resortos-guest.com`,
-      roomCategory: category,
-      checkInDate: '2026-11-20',
-      checkOutDate: '2026-11-24',
-      nightsCount: numNights,
-      numberOfGuests: numGuests,
+      guestName,
+      guestPhone,
+      guestEmail: guestEmail || `${guestName.toLowerCase().replace(/\s+/g, '')}@gmail.com`,
+      roomCategory: roomType as any,
+      checkInDate,
+      checkOutDate,
+      nightsCount: 3,
+      numberOfGuests: parseInt(adults, 10) + parseInt(children, 10),
       status: 'confirmed',
-      totalAmount,
-      depositPaid,
-      paymentStatus: 'partial',
-      specialRequests: specialRequests.trim() || 'Advance VIP Reservation entry',
+      totalAmount: price * (bookingType === 'event' ? alloc : count) * 3,
+      depositPaid: advance,
+      paymentStatus: advance > 0 ? 'partial' : 'unpaid',
+      specialRequests: specialNotes,
+      bookingType,
+      eventName: bookingType === 'event' ? eventName : undefined,
+      requiredRooms: bookingType === 'event' ? req : undefined,
+      allocatedRooms: bookingType === 'event' ? alloc : undefined,
+      remainingRooms: bookingType === 'event' ? rem : undefined,
+      roomPrice: price,
+      advanceAmount: advance,
     });
 
-    setGuestName('');
-    setGuestPhone('');
-    setGuestEmail('');
-    setSpecialRequests('');
     setShowAddModal(false);
+    Alert.alert('Success', 'Booking confirmed and recorded in system.');
+  };
+
+  const openAllocateModal = (booking: Booking) => {
+    setSelectedEventBooking(booking);
+    setExtraRoomsCount('1');
+    setAllocateModalVisible(true);
+  };
+
+  const handleSaveAdditionalAllocation = () => {
+    if (!selectedEventBooking) return;
+    const extra = parseInt(extraRoomsCount, 10) || 0;
+    if (extra <= 0) {
+      Alert.alert('Invalid Count', 'Please enter a valid room count');
+      return;
+    }
+
+    const currentAlloc = selectedEventBooking.allocatedRooms || selectedEventBooking.numberOfGuests || 1;
+    const required = selectedEventBooking.requiredRooms || currentAlloc;
+    const newAlloc = currentAlloc + extra;
+    const newRem = Math.max(0, required - newAlloc);
+
+    selectedEventBooking.allocatedRooms = newAlloc;
+    selectedEventBooking.remainingRooms = newRem;
+
+    setAllocateModalVisible(false);
+    Alert.alert('Allocation Updated', `${extra} additional rooms successfully allocated.`);
   };
 
   return (
@@ -117,150 +194,194 @@ export const AdvanceBookingScreen: React.FC = () => {
       <Header
         title="Advance Bookings"
         subtitle={selectedHotel.name}
-        hotelBadge={`${advanceBookingSummary.upcomingCount} UPCOMING`}
+        hotelBadge={selectedHotel.code}
         showBack
         onBack={goBack}
         rightAction={
-          <TouchableOpacity
-            activeOpacity={0.7}
-            onPress={() => setShowAddModal(true)}
-            style={styles.addBtn}
-          >
-            <Icon name="plus" size={16} color={colors.accentBlue} />
-          </TouchableOpacity>
+          <Button
+            title={activeTab === 'normal' ? '+ New Booking' : '+ New Event'}
+            size="sm"
+            variant="primary"
+            onPress={() => openAddModal(activeTab)}
+          />
         }
       />
 
-      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-        {/* KPI Summary Card */}
-        <View style={styles.summaryCard}>
-          <View style={styles.statCol}>
-            <Text style={styles.statNum}>{advanceBookingSummary.upcomingCount}</Text>
-            <Text style={styles.statLabel}>Active Pipeline</Text>
-          </View>
-          <View style={styles.statDivider} />
-          <View style={styles.statCol}>
-            <Text style={[styles.statNum, { color: colors.success }]}>
-              {advanceBookingSummary.confirmedRevenue}
-            </Text>
-            <Text style={styles.statLabel}>Confirmed Rev.</Text>
-          </View>
-          <View style={styles.statDivider} />
-          <View style={styles.statCol}>
-            <Text style={styles.statNum}>{advanceBookingSummary.next7DaysArrivals}</Text>
-            <Text style={styles.statLabel}>Next 7 Days</Text>
-          </View>
-        </View>
+      {/* Mode Segmented Tab Switcher */}
+      <View style={styles.tabContainer}>
+        <TouchableOpacity
+          style={[styles.tabBtn, activeTab === 'normal' && styles.tabBtnActive]}
+          onPress={() => setActiveTab('normal')}
+        >
+          <Icon name="calendar" size={16} color={activeTab === 'normal' ? colors.primaryNavy : colors.textSecondary} />
+          <Text style={[styles.tabText, activeTab === 'normal' && styles.tabTextActive]}>
+            Room Bookings
+          </Text>
+        </TouchableOpacity>
 
-        {/* Search Input */}
+        <TouchableOpacity
+          style={[styles.tabBtn, activeTab === 'event' && styles.tabBtnActive]}
+          onPress={() => setActiveTab('event')}
+        >
+          <Icon name="users" size={16} color={activeTab === 'event' ? '#7C3AED' : colors.textSecondary} />
+          <Text style={[styles.tabText, activeTab === 'event' && styles.tabTextActiveEvent]}>
+            Event Room Booking
+          </Text>
+        </TouchableOpacity>
+      </View>
+
+      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+        {/* Search Bar */}
         <Input
-          placeholder="Search by guest, booking code, or email..."
+          placeholder={
+            activeTab === 'normal'
+              ? 'Search guest name or reference...'
+              : 'Search event name, customer or contact...'
+          }
           value={searchQuery}
           onChangeText={setSearchQuery}
           leftIcon="calendar"
-          style={styles.searchInput}
+          containerStyle={styles.searchBar}
         />
 
-        {/* Status Filter Pills */}
-        <Text style={styles.filterTitle}>RESERVATION STATUS:</Text>
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.filterScroll}
-        >
-          {statusFilters.map((st) => {
-            const isActive = selectedStatus === st;
-            return (
-              <TouchableOpacity
-                key={st}
-                onPress={() => setSelectedStatus(st)}
-                style={[styles.filterPill, isActive && styles.filterPillActive]}
-              >
-                <Text style={[styles.filterPillText, isActive && styles.filterPillTextActive]}>
-                  {st.replace('_', ' ').toUpperCase()}
-                </Text>
-              </TouchableOpacity>
-            );
-          })}
-        </ScrollView>
-
-        <View style={styles.listHeader}>
-          <Text style={styles.listTitle}>
-            BOOKINGS LEDGER ({filteredBookings.length} RESERVATIONS)
-          </Text>
-        </View>
+        {/* Tab Notice */}
+        {activeTab === 'event' && (
+          <View style={styles.eventNotice}>
+            <Icon name="info" size={16} color="#7C3AED" />
+            <Text style={styles.eventNoticeText}>
+              Event Room Allocation tracks Required Rooms vs Allocated Rooms vs Remaining Rooms for large groups.
+            </Text>
+          </View>
+        )}
 
         {/* Bookings List */}
-        {filteredBookings.map((b) => {
-          const isConfirmed = b.status === 'confirmed';
-          const isCheckedIn = b.status === 'checked_in';
-          const isCancelled = b.status === 'cancelled';
+        <Text style={styles.sectionHeader}>
+          {activeTab === 'normal'
+            ? `Individual Guest Bookings (${filteredBookings.length})`
+            : `Event Group Allocations (${filteredBookings.length})`}
+        </Text>
 
-          const badgeVariant = isConfirmed
-            ? 'primary'
-            : isCheckedIn
-            ? 'success'
-            : isCancelled
-            ? 'error'
-            : 'neutral';
+        {filteredBookings.map((b) => {
+          const isEvent = b.bookingType === 'event' || Boolean(b.eventName);
+          const req = b.requiredRooms || 15;
+          const alloc = b.allocatedRooms || 10;
+          const rem = b.remainingRooms !== undefined ? b.remainingRooms : Math.max(0, req - alloc);
 
           return (
-            <View key={b.id} style={styles.bookingCard}>
-              <View style={styles.cardTop}>
-                <View style={styles.guestCol}>
-                  <Text style={styles.guestName}>{b.guestName}</Text>
-                  <Text style={styles.refText}>
-                    {b.bookingReference} • {b.roomCategory}
-                  </Text>
+            <Card key={b.id} padding="lg" variant="elevated" style={styles.bookingCard}>
+              <View style={styles.cardHeader}>
+                <View style={styles.identityBlock}>
+                  {isEvent ? (
+                    <>
+                      <Text style={styles.eventName}>{b.eventName || 'Event Group Booking'}</Text>
+                      <Text style={styles.customerSub}>
+                        Host: {b.guestName} • {b.guestPhone}
+                      </Text>
+                    </>
+                  ) : (
+                    <>
+                      <Text style={styles.guestName}>{b.guestName}</Text>
+                      <Text style={styles.customerSub}>
+                        {b.bookingReference} • {b.roomCategory || 'Deluxe Room'}
+                      </Text>
+                    </>
+                  )}
                 </View>
+
                 <Badge
-                  label={b.status.replace('_', ' ').toUpperCase()}
-                  variant={badgeVariant}
+                  label={b.status.toUpperCase()}
+                  variant={b.status === 'confirmed' ? 'primary' : 'success'}
                   size="sm"
                 />
               </View>
 
-              <View style={styles.dateRow}>
-                <Icon name="clock" size={13} color={colors.textSecondary} style={{ marginRight: 6 }} />
-                <Text style={styles.dateText}>
-                  {formatDate(b.checkInDate)} → {formatDate(b.checkOutDate)} ({b.nightsCount} Nights • {b.numberOfGuests} Guests)
-                </Text>
+              {/* EVENT ALLOCATION COUNTERS (SECTION 11 MANDATE) */}
+              {isEvent && (
+                <View style={styles.allocationBox}>
+                  <View style={styles.allocCol}>
+                    <Text style={styles.allocNum}>{req}</Text>
+                    <Text style={styles.allocLabel}>Required</Text>
+                  </View>
+                  <View style={styles.allocDivider} />
+                  <View style={styles.allocCol}>
+                    <Text style={[styles.allocNum, { color: '#047857' }]}>{alloc}</Text>
+                    <Text style={styles.allocLabel}>Allocated</Text>
+                  </View>
+                  <View style={styles.allocDivider} />
+                  <View style={styles.allocCol}>
+                    <Text style={[styles.allocNum, { color: rem > 0 ? '#DC2626' : '#047857' }]}>
+                      {rem}
+                    </Text>
+                    <Text style={styles.allocLabel}>Remaining</Text>
+                  </View>
+                </View>
+              )}
+
+              {/* Date & Stay Details */}
+              <View style={styles.stayDetails}>
+                <View style={styles.stayRow}>
+                  <Icon name="clock" size={14} color={colors.textSecondary} />
+                  <Text style={styles.stayText}>
+                    {formatDate(b.checkInDate)} → {formatDate(b.checkOutDate)} ({b.nightsCount || 3} Nights)
+                  </Text>
+                </View>
+                <View style={styles.stayRow}>
+                  <Icon name="user" size={14} color={colors.textSecondary} />
+                  <Text style={styles.stayText}>
+                    {b.numberOfGuests || 2} Total Guests {b.roomNumber ? `• Assigned Room: ${b.roomNumber}` : ''}
+                  </Text>
+                </View>
               </View>
 
-              {b.roomNumber && (
-                <View style={styles.roomTagRow}>
-                  <Icon name="key" size={12} color={colors.accentBlue} style={{ marginRight: 4 }} />
-                  <Text style={styles.roomTagText}>Assigned Room: {b.roomNumber}</Text>
+              {/* Financial Breakdown */}
+              <View style={styles.financeBox}>
+                <View style={styles.financeRow}>
+                  <Text style={styles.financeLabel}>Total Booking Amount:</Text>
+                  <Text style={styles.financeVal}>{formatCurrency(b.totalAmount)}</Text>
                 </View>
-              )}
-
-              {b.specialRequests && (
-                <View style={styles.requestsBox}>
-                  <Text style={styles.requestsText} numberOfLines={2}>
-                    Note: {b.specialRequests}
+                <View style={styles.financeRow}>
+                  <Text style={styles.financeLabel}>Advance Paid:</Text>
+                  <Text style={[styles.financeVal, { color: '#047857' }]}>
+                    {formatCurrency(b.depositPaid)}
                   </Text>
                 </View>
-              )}
-
-              <View style={styles.cardFooter}>
-                <View>
-                  <Text style={styles.totalValue}>{formatCurrency(b.totalAmount)}</Text>
-                  <Text style={styles.depositText}>
-                    Deposit: {formatCurrency(b.depositPaid)} ({b.paymentStatus.toUpperCase()})
+                <View style={styles.financeRow}>
+                  <Text style={styles.financeLabel}>Remaining Balance Due:</Text>
+                  <Text style={[styles.financeVal, { color: '#DC2626', fontWeight: '800' }]}>
+                    {formatCurrency(Math.max(0, b.totalAmount - b.depositPaid))}
                   </Text>
                 </View>
+              </View>
 
-                {isConfirmed && (
+              {/* Action Buttons */}
+              <View style={styles.actionsRow}>
+                {isEvent && rem > 0 && (
                   <TouchableOpacity
-                    onPress={() => cancelBooking(b.id)}
-                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                    style={styles.cancelActionBtn}
+                    style={styles.allocateBtn}
+                    onPress={() => openAllocateModal(b)}
                   >
-                    <Text style={styles.cancelActionText}>Cancel Booking</Text>
+                    <Icon name="plus" size={14} color="#7C3AED" />
+                    <Text style={styles.allocateBtnText}>Allocate More Rooms</Text>
                   </TouchableOpacity>
                 )}
+
+                <TouchableOpacity
+                  style={styles.cancelBtn}
+                  onPress={() => {
+                    Alert.alert('Cancel Booking', `Cancel reservation for ${b.guestName}?`, [
+                      { text: 'No', style: 'cancel' },
+                      {
+                        text: 'Cancel Reservation',
+                        style: 'destructive',
+                        onPress: () => cancelBooking(b.id),
+                      },
+                    ]);
+                  }}
+                >
+                  <Text style={styles.cancelBtnText}>Cancel</Text>
+                </TouchableOpacity>
               </View>
-            </View>
+            </Card>
           );
         })}
 
@@ -268,110 +389,220 @@ export const AdvanceBookingScreen: React.FC = () => {
           <View style={styles.emptyState}>
             <Icon name="calendar" size={36} color={colors.textMuted} />
             <Text style={styles.emptyTitle}>No Reservations Found</Text>
-            <Text style={styles.emptyDesc}>No bookings match the specified filters.</Text>
+            <Text style={styles.emptyDesc}>No active bookings matching your criteria.</Text>
           </View>
         )}
       </ScrollView>
 
-      {/* Full Create Reservation Modal */}
-      <Modal visible={showAddModal} animationType="slide" transparent={false}>
-        <SafeAreaView style={styles.safeArea}>
-          <View style={styles.modalHeader}>
-            <Text style={styles.modalTitle}>New Reservation Request</Text>
-            <TouchableOpacity
-              onPress={() => setShowAddModal(false)}
-              style={styles.modalCloseBtn}
-            >
-              <Icon name="x" size={18} color={colors.textSecondary} />
-            </TouchableOpacity>
-          </View>
-
-          <ScrollView contentContainerStyle={styles.modalBody}>
-            <Input
-              label="Guest Full Name"
-              placeholder="e.g. Vivienne Montgomery"
-              value={guestName}
-              onChangeText={setGuestName}
-            />
-            <Input
-              label="Phone Number"
-              placeholder="+1 (555) 789-0123"
-              value={guestPhone}
-              onChangeText={setGuestPhone}
-            />
-            <Input
-              label="Email Address"
-              placeholder="guest@domain.com"
-              value={guestEmail}
-              onChangeText={setGuestEmail}
-            />
-
-            <Text style={styles.formSectionLabel}>SELECT ROOM CATEGORY:</Text>
-            {roomCategories.map((cat) => (
-              <TouchableOpacity
-                key={cat}
-                onPress={() => setCategory(cat)}
-                style={[styles.categoryChoice, category === cat && styles.categoryChoiceActive]}
-              >
-                <View>
-                  <Text
-                    style={[
-                      styles.categoryName,
-                      category === cat && styles.categoryNameActive,
-                    ]}
-                  >
-                    {cat}
-                  </Text>
-                  <Text style={styles.categoryRate}>${categoryRates[cat]} / night</Text>
-                </View>
-                {category === cat && <Badge label="SELECTED" variant="primary" size="sm" />}
+      {/* Add Booking Modal (Normal or Event) */}
+      <Modal visible={showAddModal} animationType="slide" transparent>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalCard}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>
+                {bookingType === 'normal' ? 'New Room Reservation' : 'New Event Room Booking'}
+              </Text>
+              <TouchableOpacity onPress={() => setShowAddModal(false)}>
+                <Icon name="x" size={22} color={colors.textSecondary} />
               </TouchableOpacity>
-            ))}
-
-            <View style={styles.numFieldsRow}>
-              <View style={{ flex: 1, marginRight: spacing.sm }}>
-                <Input
-                  label="Nights Count"
-                  placeholder="4"
-                  keyboardType="numeric"
-                  value={nights}
-                  onChangeText={setNights}
-                />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Input
-                  label="Guests Count"
-                  placeholder="2"
-                  keyboardType="numeric"
-                  value={adults}
-                  onChangeText={setAdults}
-                />
-              </View>
             </View>
 
-            <Input
-              label="Special Requests / Concierge Notes"
-              placeholder="e.g. Ocean view preferred, airport chauffeur"
-              value={specialRequests}
-              onChangeText={setSpecialRequests}
-            />
+            <ScrollView showsVerticalScrollIndicator={false}>
+              {bookingType === 'event' && (
+                <Input
+                  label="Event Name *"
+                  placeholder="e.g. Singhania Wedding Reception"
+                  value={eventName}
+                  onChangeText={setEventName}
+                />
+              )}
 
-            <View style={styles.estSummary}>
-              <Text style={styles.estLabel}>Estimated Total Amount:</Text>
-              <Text style={styles.estValue}>
-                {formatCurrency((parseInt(nights, 10) || 3) * (categoryRates[category] || 350))}
+              <Input
+                label={bookingType === 'event' ? 'Primary Customer / Host Name *' : 'Guest Full Name *'}
+                placeholder="e.g. Amitabh Sengupta"
+                value={guestName}
+                onChangeText={setGuestName}
+              />
+
+              <Input
+                label="Mobile Phone *"
+                placeholder="+91 98290 11223"
+                value={guestPhone}
+                onChangeText={setGuestPhone}
+                keyboardType="phone-pad"
+              />
+
+              <Input
+                label="Email Address (Optional)"
+                placeholder="guest@gmail.com"
+                value={guestEmail}
+                onChangeText={setGuestEmail}
+                keyboardType="email-address"
+              />
+
+              <View style={styles.halfRow}>
+                <Input
+                  label="Check-in Date"
+                  value={checkInDate}
+                  onChangeText={setCheckInDate}
+                  containerStyle={styles.halfInput}
+                />
+                <Input
+                  label="Check-out Date"
+                  value={checkOutDate}
+                  onChangeText={setCheckOutDate}
+                  containerStyle={styles.halfInput}
+                />
+              </View>
+
+              {/* Event Room Counts */}
+              {bookingType === 'event' ? (
+                <View style={styles.halfRow}>
+                  <Input
+                    label="Total Required Rooms *"
+                    placeholder="20"
+                    value={requiredRooms}
+                    onChangeText={setRequiredRooms}
+                    keyboardType="numeric"
+                    containerStyle={styles.halfInput}
+                  />
+                  <Input
+                    label="Initial Allocated Rooms *"
+                    placeholder="15"
+                    value={allocatedRooms}
+                    onChangeText={setAllocatedRooms}
+                    keyboardType="numeric"
+                    containerStyle={styles.halfInput}
+                  />
+                </View>
+              ) : (
+                <View style={styles.halfRow}>
+                  <Input
+                    label="Number of Rooms"
+                    value={totalRoomsCount}
+                    onChangeText={setTotalRoomsCount}
+                    keyboardType="numeric"
+                    containerStyle={styles.halfInput}
+                  />
+                  <Input
+                    label="Adults / Children"
+                    value={`${adults} Adults, ${children} Children`}
+                    onChangeText={(t) => setAdults(t)}
+                    containerStyle={styles.halfInput}
+                  />
+                </View>
+              )}
+
+              {/* Room Type Selector */}
+              <Text style={styles.formSectionLabel}>Room Type *</Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.roomTypeScroll}>
+                {roomTypeOptions.map((rt) => (
+                  <TouchableOpacity
+                    key={rt}
+                    style={[styles.typePill, roomType === rt && styles.typePillActive]}
+                    onPress={() => setRoomType(rt)}
+                  >
+                    <Text style={[styles.typePillText, roomType === rt && styles.typePillTextActive]}>
+                      {rt}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+
+              <View style={styles.halfRow}>
+                <Input
+                  label="Room Rate / Night (₹)"
+                  value={roomPrice}
+                  onChangeText={setRoomPrice}
+                  keyboardType="numeric"
+                  containerStyle={styles.halfInput}
+                />
+                <Input
+                  label="Advance Amount (₹)"
+                  value={advanceAmount}
+                  onChangeText={setAdvanceAmount}
+                  keyboardType="numeric"
+                  containerStyle={styles.halfInput}
+                />
+              </View>
+
+              {/* Payment Method */}
+              <Text style={styles.formSectionLabel}>Advance Payment Mode *</Text>
+              <View style={styles.payModeRow}>
+                {(['UPI', 'Cash', 'Card'] as const).map((m) => (
+                  <TouchableOpacity
+                    key={m}
+                    style={[styles.payModeBtn, paymentMethod === m && styles.payModeBtnActive]}
+                    onPress={() => setPaymentMethod(m)}
+                  >
+                    <Text style={[styles.payModeText, paymentMethod === m && styles.payModeTextActive]}>
+                      {m}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              <Input
+                label="Special Requests / Notes"
+                placeholder="e.g. Ground floor preferred, vegetarian food"
+                value={specialNotes}
+                onChangeText={setSpecialNotes}
+              />
+
+              <Button
+                title={bookingType === 'event' ? 'Confirm Event Room Booking' : 'Confirm Room Booking'}
+                onPress={handleCreateBooking}
+                variant="primary"
+                size="lg"
+                style={styles.modalSaveBtn}
+              />
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Allocate Additional Rooms Modal */}
+      <Modal visible={allocateModalVisible} animationType="fade" transparent>
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalCard, styles.smallModal]}>
+            <Text style={styles.modalTitle}>Allocate Additional Rooms</Text>
+            <Text style={styles.eventSubTitle}>
+              {selectedEventBooking?.eventName} • {selectedEventBooking?.guestName}
+            </Text>
+
+            <View style={styles.allocDetailsRow}>
+              <Text style={styles.allocDetailLabel}>Required: {selectedEventBooking?.requiredRooms}</Text>
+              <Text style={styles.allocDetailLabel}>Currently Allocated: {selectedEventBooking?.allocatedRooms}</Text>
+              <Text style={[styles.allocDetailLabel, { color: '#DC2626', fontWeight: '700' }]}>
+                Remaining: {selectedEventBooking?.remainingRooms}
               </Text>
             </View>
 
-            <Button
-              title="Confirm & Save Reservation"
-              variant="primary"
-              size="lg"
-              onPress={handleCreateReservation}
-              style={{ marginTop: spacing.md }}
+            <Input
+              label="Additional Rooms to Allocate"
+              placeholder="e.g. 2"
+              value={extraRoomsCount}
+              onChangeText={setExtraRoomsCount}
+              keyboardType="numeric"
+              containerStyle={{ marginVertical: spacing.md }}
             />
-          </ScrollView>
-        </SafeAreaView>
+
+            <View style={styles.modalActionsRow}>
+              <Button
+                title="Cancel"
+                variant="ghost"
+                onPress={() => setAllocateModalVisible(false)}
+                style={{ flex: 1, marginRight: spacing.sm }}
+              />
+              <Button
+                title="Confirm Allocation"
+                variant="primary"
+                onPress={handleSaveAdditionalAllocation}
+                style={{ flex: 1 }}
+              />
+            </View>
+          </View>
+        </View>
       </Modal>
     </SafeAreaView>
   );
@@ -380,276 +611,321 @@ export const AdvanceBookingScreen: React.FC = () => {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: colors.background,
+    backgroundColor: '#F8FAFC',
   },
   scrollContent: {
-    padding: spacing.lg,
-    paddingBottom: spacing.xxxl,
+    padding: spacing.md,
+    paddingBottom: spacing.xxl,
   },
-  addBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: borderRadius.sm,
-    backgroundColor: colors.primaryTint,
+  tabContainer: {
+    flexDirection: 'row',
+    backgroundColor: '#FFFFFF',
+    borderBottomWidth: 1,
+    borderBottomColor: '#E2E8F0',
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs,
+  },
+  tabBtn: {
+    flex: 1,
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: '#D0E1F2',
-  },
-  summaryCard: {
-    flexDirection: 'row',
-    backgroundColor: colors.surface,
-    padding: spacing.md,
+    paddingVertical: spacing.sm,
     borderRadius: borderRadius.md,
-    borderWidth: 1,
-    borderColor: colors.border,
-    justifyContent: 'space-around',
-    alignItems: 'center',
-    marginBottom: spacing.md,
-    ...shadows.sm,
   },
-  statCol: {
-    alignItems: 'center',
+  tabBtnActive: {
+    backgroundColor: '#F1F5F9',
   },
-  statNum: {
-    ...typography.h3,
+  tabText: {
+    ...typography.subtitle2,
+    color: colors.textSecondary,
+    marginLeft: 6,
+    fontWeight: '600',
+  },
+  tabTextActive: {
     color: colors.primaryNavy,
+    fontWeight: '800',
   },
-  statLabel: {
-    ...typography.caption,
-    fontSize: 10,
-    color: colors.textSecondary,
-    marginTop: 2,
+  tabTextActiveEvent: {
+    color: '#7C3AED',
+    fontWeight: '800',
   },
-  statDivider: {
-    width: 1,
-    height: 28,
-    backgroundColor: colors.border,
+  searchBar: {
+    marginBottom: spacing.sm,
   },
-  searchInput: {
-    marginBottom: spacing.xs,
-  },
-  filterTitle: {
-    ...typography.overline,
-    fontSize: 9,
-    color: colors.textSecondary,
-    marginTop: spacing.xs,
-    marginBottom: 4,
-  },
-  filterScroll: {
-    paddingBottom: spacing.xs,
-    marginBottom: 2,
-  },
-  filterPill: {
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: borderRadius.xs,
-    backgroundColor: colors.surfaceSubtle,
+  eventNotice: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F5F3FF',
     borderWidth: 1,
-    borderColor: colors.border,
-    marginRight: 6,
+    borderColor: '#DDD6FE',
+    borderRadius: borderRadius.md,
+    padding: spacing.md,
+    marginBottom: spacing.md,
   },
-  filterPillActive: {
-    backgroundColor: colors.primaryNavy,
-    borderColor: colors.primaryNavy,
+  eventNoticeText: {
+    ...typography.captionMedium,
+    color: '#6D28D9',
+    marginLeft: spacing.sm,
+    flex: 1,
+    lineHeight: 18,
   },
-  filterPillText: {
-    ...typography.caption,
-    fontSize: 11,
-    color: colors.textSecondary,
-  },
-  filterPillTextActive: {
-    color: colors.surface,
-    fontWeight: '700',
-  },
-  listHeader: {
-    marginTop: spacing.md,
-    marginBottom: spacing.xs,
-  },
-  listTitle: {
-    ...typography.overline,
-    color: colors.textSecondary,
+  sectionHeader: {
+    ...typography.h3,
+    color: colors.textPrimary,
+    marginBottom: spacing.sm,
+    paddingHorizontal: 2,
   },
   bookingCard: {
-    backgroundColor: colors.surface,
-    borderRadius: borderRadius.md,
-    padding: spacing.md,
-    marginVertical: spacing.xs,
-    borderWidth: 1,
-    borderColor: colors.border,
-    ...shadows.sm,
+    marginBottom: spacing.md,
+    borderRadius: borderRadius.lg,
   },
-  cardTop: {
+  cardHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
+    marginBottom: spacing.sm,
   },
-  guestCol: {
+  identityBlock: {
     flex: 1,
-    marginRight: spacing.sm,
+  },
+  eventName: {
+    ...typography.subtitle1,
+    color: '#7C3AED',
+    fontWeight: '800',
   },
   guestName: {
-    ...typography.bodySemiBold,
+    ...typography.subtitle1,
     color: colors.textPrimary,
+    fontWeight: '700',
   },
-  refText: {
+  customerSub: {
     ...typography.caption,
     color: colors.textSecondary,
     marginTop: 1,
   },
-  dateRow: {
+  allocationBox: {
     flexDirection: 'row',
+    justifyContent: 'space-around',
     alignItems: 'center',
-    marginTop: spacing.xs,
+    backgroundColor: '#F8FAFC',
+    borderRadius: borderRadius.md,
+    paddingVertical: spacing.sm,
+    marginBottom: spacing.sm,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
   },
-  dateText: {
-    ...typography.caption,
-    fontSize: 11,
-    color: colors.textSecondary,
-  },
-  roomTagRow: {
-    flexDirection: 'row',
+  allocCol: {
     alignItems: 'center',
-    marginTop: 3,
+    flex: 1,
   },
-  roomTagText: {
-    ...typography.captionBold,
-    color: colors.accentBlue,
-    fontSize: 11,
+  allocNum: {
+    ...typography.h2,
+    color: colors.textPrimary,
+    fontWeight: '800',
   },
-  requestsBox: {
-    backgroundColor: colors.surfaceSubtle,
-    borderRadius: borderRadius.xs,
-    padding: 6,
-    marginTop: spacing.xs,
-  },
-  requestsText: {
+  allocLabel: {
     ...typography.caption,
-    color: colors.textSecondary,
+    color: colors.textMuted,
     fontSize: 10,
+    marginTop: 2,
   },
-  cardFooter: {
+  allocDivider: {
+    width: 1,
+    height: 32,
+    backgroundColor: '#E2E8F0',
+  },
+  stayDetails: {
+    marginBottom: spacing.sm,
+  },
+  stayRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 2,
+  },
+  stayText: {
+    ...typography.captionMedium,
+    color: colors.textSecondary,
+    marginLeft: 6,
+  },
+  financeBox: {
+    borderTopWidth: 1,
+    borderTopColor: '#F1F5F9',
+    paddingTop: spacing.xs,
+    marginBottom: spacing.sm,
+  },
+  financeRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
-    marginTop: spacing.sm,
-    paddingTop: spacing.xs,
-    borderTopWidth: 1,
-    borderTopColor: colors.surfaceSubtle,
+    marginBottom: 3,
   },
-  totalValue: {
-    ...typography.bodySemiBold,
-    color: colors.primaryNavy,
-  },
-  depositText: {
+  financeLabel: {
     ...typography.caption,
-    fontSize: 10,
-    color: colors.textMuted,
+    color: colors.textSecondary,
   },
-  cancelActionBtn: {
-    paddingVertical: 4,
-    paddingHorizontal: 8,
+  financeVal: {
+    ...typography.captionMedium,
+    color: colors.textPrimary,
   },
-  cancelActionText: {
-    ...typography.captionBold,
+  actionsRow: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: spacing.sm,
+    borderTopWidth: 1,
+    borderTopColor: '#F1F5F9',
+    paddingTop: spacing.sm,
+  },
+  allocateBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F5F3FF',
+    paddingHorizontal: spacing.md,
+    paddingVertical: 6,
+    borderRadius: borderRadius.md,
+  },
+  allocateBtnText: {
+    ...typography.captionMedium,
+    color: '#7C3AED',
+    marginLeft: 4,
+    fontWeight: '700',
+  },
+  cancelBtn: {
+    paddingHorizontal: spacing.md,
+    paddingVertical: 6,
+    borderRadius: borderRadius.md,
+    backgroundColor: '#FEF2F2',
+  },
+  cancelBtnText: {
+    ...typography.captionMedium,
     color: colors.error,
   },
   emptyState: {
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: spacing.xxl,
+    padding: spacing.xxl,
   },
   emptyTitle: {
-    ...typography.h4,
+    ...typography.subtitle1,
     color: colors.textPrimary,
+    fontWeight: '700',
     marginTop: spacing.md,
   },
   emptyDesc: {
     ...typography.caption,
-    color: colors.textSecondary,
-    textAlign: 'center',
-    marginTop: 2,
+    color: colors.textMuted,
+    marginTop: 4,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    padding: spacing.lg,
+  },
+  modalCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: borderRadius.xl,
+    padding: spacing.lg,
+    maxHeight: '92%',
+    ...shadows.lg,
+  },
+  smallModal: {
+    maxHeight: 340,
   },
   modalHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: spacing.lg,
+    marginBottom: spacing.md,
     borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-    backgroundColor: colors.surface,
+    borderBottomColor: '#F1F5F9',
+    paddingBottom: spacing.sm,
   },
   modalTitle: {
-    ...typography.h4,
-    color: colors.primaryNavy,
-  },
-  modalCloseBtn: {
-    width: 32,
-    height: 32,
-    borderRadius: borderRadius.xs,
-    backgroundColor: colors.surfaceSubtle,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  modalBody: {
-    padding: spacing.lg,
-    paddingBottom: spacing.xxxl,
-  },
-  formSectionLabel: {
-    ...typography.overline,
-    fontSize: 10,
-    color: colors.textSecondary,
-    marginTop: spacing.sm,
-    marginBottom: 6,
-  },
-  categoryChoice: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: spacing.sm,
-    borderRadius: borderRadius.sm,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.surface,
-    marginBottom: 6,
-  },
-  categoryChoiceActive: {
-    borderColor: colors.accentBlue,
-    backgroundColor: colors.primaryTint,
-  },
-  categoryName: {
-    ...typography.bodySemiBold,
+    ...typography.h3,
     color: colors.textPrimary,
   },
-  categoryNameActive: {
-    color: colors.accentBlue,
+  eventSubTitle: {
+    ...typography.captionMedium,
+    color: '#7C3AED',
+    marginTop: 2,
   },
-  categoryRate: {
+  allocDetailsRow: {
+    backgroundColor: '#F8FAFC',
+    borderRadius: borderRadius.md,
+    padding: spacing.sm,
+    marginTop: spacing.sm,
+  },
+  allocDetailLabel: {
     ...typography.caption,
     color: colors.textSecondary,
-    fontSize: 11,
+    marginBottom: 2,
   },
-  numFieldsRow: {
+  halfRow: {
     flexDirection: 'row',
-    marginTop: spacing.xs,
+    gap: spacing.sm,
   },
-  estSummary: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    backgroundColor: colors.surfaceSubtle,
-    padding: spacing.md,
-    borderRadius: borderRadius.sm,
-    marginTop: spacing.md,
-    borderWidth: 1,
-    borderColor: colors.border,
+  halfInput: {
+    flex: 1,
   },
-  estLabel: {
-    ...typography.bodySemiBold,
+  formSectionLabel: {
+    ...typography.subtitle2,
     color: colors.textPrimary,
+    marginTop: spacing.sm,
+    marginBottom: spacing.xs,
   },
-  estValue: {
-    ...typography.h3,
-    color: colors.primaryNavy,
+  roomTypeScroll: {
+    flexDirection: 'row',
+    marginBottom: spacing.md,
+  },
+  typePill: {
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs,
+    borderRadius: borderRadius.full,
+    backgroundColor: '#F1F5F9',
+    marginRight: spacing.xs,
+  },
+  typePillActive: {
+    backgroundColor: colors.primaryNavy,
+  },
+  typePillText: {
+    ...typography.captionMedium,
+    color: colors.textSecondary,
+  },
+  typePillTextActive: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+  },
+  payModeRow: {
+    flexDirection: 'row',
+    gap: spacing.xs,
+    marginBottom: spacing.md,
+  },
+  payModeBtn: {
+    flex: 1,
+    paddingVertical: spacing.xs,
+    borderRadius: borderRadius.md,
+    backgroundColor: '#F1F5F9',
+    alignItems: 'center',
+  },
+  payModeBtnActive: {
+    backgroundColor: '#059669',
+  },
+  payModeText: {
+    ...typography.captionMedium,
+    color: colors.textSecondary,
+  },
+  payModeTextActive: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+  },
+  modalSaveBtn: {
+    marginTop: spacing.md,
+    marginBottom: spacing.md,
+  },
+  modalActionsRow: {
+    flexDirection: 'row',
+    marginTop: spacing.sm,
   },
 });
+
+export default AdvanceBookingScreen;

@@ -1,3 +1,9 @@
+/**
+ * ResortOS - Common Login & Authentication Screen
+ * Unified authentication gateway with role selection, show/hide password,
+ * server-side role validation, and role-based routing.
+ */
+
 import React, { useState } from 'react';
 import {
   View,
@@ -7,78 +13,106 @@ import {
   SafeAreaView,
   KeyboardAvoidingView,
   Platform,
+  TouchableOpacity,
+  ActivityIndicator,
 } from 'react-native';
 import { colors } from '../theme/colors';
 import { typography } from '../theme/typography';
 import { spacing, borderRadius, shadows } from '../theme/spacing';
 import { useNavigation } from '../hooks/useNavigation';
-import { Header } from '../components/common/Header';
-import { Card } from '../components/common/Card';
+import { useHotel } from '../hooks/useHotel';
 import { Input } from '../components/common/Input';
 import { Button } from '../components/common/Button';
 import { Badge } from '../components/common/Badge';
 import { Icon } from '../components/common/Icon';
 
-export const LoginScreen: React.FC = () => {
-  const { params, navigate, goBack } = useNavigation();
-  const role = params.role || 'admin';
-  const isAdmin = role === 'admin';
+type SelectedRole = 'admin' | 'manager';
 
-  const [username, setUsername] = useState(isAdmin ? 'admin@resortos.com' : 'manager@resortos.com');
+export const LoginScreen: React.FC = () => {
+  const { navigate } = useNavigation();
+  const { login } = useHotel();
+
+  // Selected Role in UI (Admin or Manager)
+  const [selectedRole, setSelectedRole] = useState<SelectedRole>('admin');
+  const [emailOrUsername, setEmailOrUsername] = useState('admin@resortos.com');
   const [password, setPassword] = useState('Password123!');
   const [loading, setLoading] = useState(false);
-  const [errors, setErrors] = useState<{ username?: string; password?: string }>({});
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<{ email?: string; password?: string }>({});
+
+  const handleRoleSelect = (role: SelectedRole) => {
+    setSelectedRole(role);
+    setErrorMessage(null);
+    setFieldErrors({});
+
+    if (role === 'admin') {
+      setEmailOrUsername('admin@resortos.com');
+      setPassword('Password123!');
+    } else {
+      setEmailOrUsername('manager.villa@resortos.com');
+      setPassword('Password123!');
+    }
+  };
+
+  const setDemoAccount = (role: SelectedRole, email: string) => {
+    setSelectedRole(role);
+    setEmailOrUsername(email);
+    setPassword('Password123!');
+    setErrorMessage(null);
+    setFieldErrors({});
+  };
 
   const validate = (): boolean => {
-    const newErrors: { username?: string; password?: string } = {};
+    const errors: { email?: string; password?: string } = {};
 
-    if (!username.trim()) {
-      newErrors.username = 'Username or email address is required';
-    } else if (username.length < 3) {
-      newErrors.username = 'Please enter a valid username or email';
+    if (!emailOrUsername.trim()) {
+      errors.email = 'Please enter your username or email address';
+    } else if (emailOrUsername.trim().length < 3) {
+      errors.email = 'Must be at least 3 characters';
     }
 
     if (!password) {
-      newErrors.password = 'Password is required';
+      errors.password = 'Password is required';
     } else if (password.length < 4) {
-      newErrors.password = 'Password must be at least 4 characters';
+      errors.password = 'Password must be at least 4 characters';
     }
 
-    setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
+    setFieldErrors(errors);
+    return Object.keys(errors).length === 0;
   };
 
-  const handleLogin = () => {
+  const handleLogin = async () => {
     if (!validate()) return;
 
     setLoading(true);
-    // UI Preview simulation
-    setTimeout(() => {
-      setLoading(false);
-      if (isAdmin) {
-        navigate('admin-dashboard', { role: 'admin' });
+    setErrorMessage(null);
+
+    try {
+      const result = await login(emailOrUsername, password, selectedRole.toUpperCase());
+
+      if (result.success && result.user) {
+        // Successful login: Redirect based on database-verified role
+        if (result.user.role === 'ADMIN') {
+          navigate('admin-dashboard', { role: 'admin' });
+        } else {
+          navigate('manager-dashboard', {
+            role: 'manager',
+            selectedHotelId: result.user.hotelId || 'h-villa',
+          });
+        }
       } else {
-        navigate('manager-dashboard', { role: 'manager' });
+        setErrorMessage(result.error || 'Authentication failed. Please verify your credentials.');
       }
-    }, 600);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Connection error. Please try again.';
+      setErrorMessage(msg);
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      <Header
-        title={isAdmin ? 'Administrator Login' : 'Manager Login'}
-        subtitle="Secure Portal Authentication"
-        showBack
-        onBack={goBack}
-        rightAction={
-          <Badge
-            label={isAdmin ? 'ADMIN' : 'MANAGER'}
-            variant={isAdmin ? 'primary' : 'success'}
-            size="sm"
-          />
-        }
-      />
-
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         style={styles.keyboardView}
@@ -88,96 +122,182 @@ export const LoginScreen: React.FC = () => {
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
-          {/* Preview Info Banner */}
-          <View style={styles.previewBanner}>
-            <Icon name="check-circle" size={16} color={colors.accentBlue} style={styles.bannerIcon} />
-            <Text style={styles.bannerText}>
-              UI Preview Mode: Credentials are pre-filled for rapid inspection. Tap Sign In to preview.
-            </Text>
+          {/* Brand Header */}
+          <View style={styles.brandContainer}>
+            <View style={styles.brandIconWrapper}>
+              <Icon name="hotel" size={32} color={colors.primaryNavy} />
+            </View>
+            <Text style={styles.brandTitle}>ResortOS</Text>
+            <Text style={styles.brandSubtitle}>HOTEL & RESORT MANAGEMENT APPLICATION</Text>
+            <View style={styles.propertiesTag}>
+              <Text style={styles.propertiesText}>THE VILLA  •  NAVKAR PALACE & RESORT</Text>
+            </View>
           </View>
 
           {/* Form Card */}
-          <Card padding="lg" variant="elevated" style={styles.formCard}>
-            <View style={styles.cardHeader}>
-              <View
-                style={[
-                  styles.roleIconCircle,
-                  { backgroundColor: isAdmin ? colors.primaryTint : '#F0FDF4' },
-                ]}
-              >
-                <Icon
-                  name={isAdmin ? 'shield' : 'user'}
-                  size={26}
-                  color={isAdmin ? colors.primaryNavy : colors.success}
-                />
-              </View>
-              <Text style={styles.formTitle}>
-                {isAdmin ? 'Executive Access' : 'Property Management'}
-              </Text>
-              <Text style={styles.formSubtitle}>
-                Enter your credentials to manage resort operations.
-              </Text>
+          <View style={styles.card}>
+            {/* Role Selector Tabs */}
+            <View style={styles.roleSelectorHeader}>
+              <Text style={styles.selectorLabel}>Select Login Role</Text>
+              <Badge
+                label={selectedRole === 'admin' ? 'Owner / Admin' : 'Hotel Manager'}
+                variant={selectedRole === 'admin' ? 'primary' : 'success'}
+                size="sm"
+              />
             </View>
 
-            {/* Username Field */}
+            <View style={styles.roleTabsContainer}>
+              <TouchableOpacity
+                style={[
+                  styles.roleTab,
+                  selectedRole === 'admin' && styles.roleTabActiveAdmin,
+                ]}
+                activeOpacity={0.8}
+                onPress={() => handleRoleSelect('admin')}
+              >
+                <Icon
+                  name="shield"
+                  size={18}
+                  color={selectedRole === 'admin' ? colors.primaryNavy : colors.textSecondary}
+                />
+                <Text
+                  style={[
+                    styles.roleTabText,
+                    selectedRole === 'admin' && styles.roleTabTextActiveAdmin,
+                  ]}
+                >
+                  Admin / Owner
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[
+                  styles.roleTab,
+                  selectedRole === 'manager' && styles.roleTabActiveManager,
+                ]}
+                activeOpacity={0.8}
+                onPress={() => handleRoleSelect('manager')}
+              >
+                <Icon
+                  name="user"
+                  size={18}
+                  color={selectedRole === 'manager' ? '#047857' : colors.textSecondary}
+                />
+                <Text
+                  style={[
+                    styles.roleTabText,
+                    selectedRole === 'manager' && styles.roleTabTextActiveManager,
+                  ]}
+                >
+                  Hotel Manager
+                </Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* Error Message Alert Banner */}
+            {errorMessage && (
+              <View style={styles.errorBanner}>
+                <Icon name="alert-triangle" size={18} color={colors.error} style={styles.errorIcon} />
+                <Text style={styles.errorBannerText}>{errorMessage}</Text>
+              </View>
+            )}
+
+            {/* Username or Email Input */}
             <Input
-              label="Username or Corporate Email"
+              label="Username or Email Address"
               placeholder="e.g. admin@resortos.com"
-              value={username}
+              value={emailOrUsername}
               onChangeText={(text) => {
-                setUsername(text);
-                if (errors.username) setErrors((prev) => ({ ...prev, username: undefined }));
+                setEmailOrUsername(text);
+                if (fieldErrors.email) setFieldErrors((prev) => ({ ...prev, email: undefined }));
+                if (errorMessage) setErrorMessage(null);
               }}
               leftIcon="mail"
               autoCapitalize="none"
               keyboardType="email-address"
-              error={errors.username}
+              error={fieldErrors.email}
+              containerStyle={styles.inputContainer}
             />
 
-            {/* Password Field */}
+            {/* Password Input with built-in Show/Hide eye toggle */}
             <Input
               label="Password"
-              placeholder="Enter your account password"
+              placeholder="Enter your password"
               value={password}
               onChangeText={(text) => {
                 setPassword(text);
-                if (errors.password) setErrors((prev) => ({ ...prev, password: undefined }));
+                if (fieldErrors.password) setFieldErrors((prev) => ({ ...prev, password: undefined }));
+                if (errorMessage) setErrorMessage(null);
               }}
               leftIcon="lock"
               isPassword
-              error={errors.password}
+              error={fieldErrors.password}
+              containerStyle={styles.inputContainer}
             />
 
-            {/* Forgot Password Link */}
-            <View style={styles.forgotPasswordRow}>
-              <Text style={styles.securityHelper}>Protected by ResortOS Security</Text>
-              <Text style={styles.forgotPasswordText}>Reset Password</Text>
+            {/* Security Notice */}
+            <View style={styles.securityRow}>
+              <Icon name="check-circle" size={14} color={colors.success} />
+              <Text style={styles.securityText}>
+                Backend verifies actual role • Strict multi-hotel isolation
+              </Text>
             </View>
 
             {/* Login Button */}
             <Button
-              title={isAdmin ? 'Sign In to Admin Dashboard' : 'Sign In to Manager Dashboard'}
+              title={
+                loading
+                  ? 'Verifying Credentials...'
+                  : selectedRole === 'admin'
+                  ? 'Sign In as Admin'
+                  : 'Sign In as Manager'
+              }
               onPress={handleLogin}
-              variant={isAdmin ? 'primary' : 'primary'}
+              variant="primary"
               size="lg"
               loading={loading}
               fullWidth
               style={styles.loginButton}
             />
 
-            {/* Switch Role Prompt */}
-            <Button
-              title={isAdmin ? 'Switch to Manager Login' : 'Switch to Admin Login'}
-              onPress={() => {
-                const targetRole = isAdmin ? 'manager' : 'admin';
-                navigate('login', { role: targetRole });
-                setUsername(targetRole === 'admin' ? 'admin@resortos.com' : 'manager@resortos.com');
-              }}
-              variant="ghost"
-              size="sm"
-              style={styles.switchButton}
-            />
-          </Card>
+            {/* Quick Demo Test Accounts */}
+            <View style={styles.demoSection}>
+              <Text style={styles.demoTitle}>QUICK DEMO ACCOUNTS</Text>
+              <View style={styles.demoChipsRow}>
+                <TouchableOpacity
+                  style={[styles.demoChip, selectedRole === 'admin' && styles.demoChipActive]}
+                  onPress={() => setDemoAccount('admin', 'admin@resortos.com')}
+                >
+                  <Text style={styles.demoChipText}>👑 Admin (Both Hotels)</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[
+                    styles.demoChip,
+                    emailOrUsername === 'manager.villa@resortos.com' && styles.demoChipActive,
+                  ]}
+                  onPress={() => setDemoAccount('manager', 'manager.villa@resortos.com')}
+                >
+                  <Text style={styles.demoChipText}>🏨 The Villa</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[
+                    styles.demoChip,
+                    emailOrUsername === 'manager.navkar@resortos.com' && styles.demoChipActive,
+                  ]}
+                  onPress={() => setDemoAccount('manager', 'manager.navkar@resortos.com')}
+                >
+                  <Text style={styles.demoChipText}>🏛️ Navkar Palace</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+
+          {/* Footer Branding */}
+          <Text style={styles.footerNote}>
+            ResortOS v2.0 • Designed for Simple & Reliable Hotel Management
+          </Text>
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -187,80 +307,204 @@ export const LoginScreen: React.FC = () => {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: colors.background,
+    backgroundColor: '#F8FAFC',
   },
   keyboardView: {
     flex: 1,
   },
   scrollContent: {
-    padding: spacing.lg,
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.xl,
+    paddingBottom: spacing.xxl,
     alignItems: 'center',
   },
-  previewBanner: {
-    flexDirection: 'row',
+  brandContainer: {
     alignItems: 'center',
-    backgroundColor: colors.accentBlueLight,
-    borderWidth: 1,
-    borderColor: colors.infoBorder,
-    borderRadius: borderRadius.md,
-    padding: spacing.md,
-    marginBottom: spacing.lg,
-    width: '100%',
-  },
-  bannerIcon: {
-    marginRight: spacing.sm,
-  },
-  bannerText: {
-    ...typography.captionMedium,
-    color: colors.accentBlue,
-    flex: 1,
-  },
-  formCard: {
-    width: '100%',
     marginBottom: spacing.xl,
   },
-  cardHeader: {
-    alignItems: 'center',
-    marginBottom: spacing.lg,
-  },
-  roleIconCircle: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
+  brandIconWrapper: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: colors.primaryTint,
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: spacing.sm,
-    borderWidth: 1,
-    borderColor: colors.border,
+    borderWidth: 1.5,
+    borderColor: '#CBD5E1',
+    ...shadows.sm,
   },
-  formTitle: {
-    ...typography.h2,
-    color: colors.textPrimary,
+  brandTitle: {
+    ...typography.h1,
+    color: colors.primaryNavy,
+    fontSize: 28,
+    fontWeight: '800',
+    letterSpacing: 0.5,
   },
-  formSubtitle: {
+  brandSubtitle: {
+    ...typography.captionMedium,
+    color: colors.textSecondary,
+    letterSpacing: 1,
+    marginTop: 2,
+    fontSize: 11,
+  },
+  propertiesTag: {
+    marginTop: spacing.xs,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 3,
+    backgroundColor: '#E2E8F0',
+    borderRadius: borderRadius.full,
+  },
+  propertiesText: {
     ...typography.caption,
     color: colors.textSecondary,
-    textAlign: 'center',
-    marginTop: 2,
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 0.5,
   },
-  forgotPasswordRow: {
+  card: {
+    width: '100%',
+    backgroundColor: '#FFFFFF',
+    borderRadius: borderRadius.lg,
+    padding: spacing.xl,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    ...shadows.md,
+  },
+  roleSelectorHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    marginBottom: spacing.sm,
+  },
+  selectorLabel: {
+    ...typography.subtitle2,
+    color: colors.textPrimary,
+    fontWeight: '700',
+  },
+  roleTabsContainer: {
+    flexDirection: 'row',
+    backgroundColor: '#F1F5F9',
+    borderRadius: borderRadius.md,
+    padding: 4,
     marginBottom: spacing.lg,
   },
-  securityHelper: {
+  roleTab: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 10,
+    borderRadius: borderRadius.sm,
+  },
+  roleTabActiveAdmin: {
+    backgroundColor: '#FFFFFF',
+    ...shadows.sm,
+    borderLeftWidth: 3,
+    borderLeftColor: colors.primaryNavy,
+  },
+  roleTabActiveManager: {
+    backgroundColor: '#FFFFFF',
+    ...shadows.sm,
+    borderLeftWidth: 3,
+    borderLeftColor: '#059669',
+  },
+  roleTabText: {
+    ...typography.body2,
+    color: colors.textSecondary,
+    fontWeight: '600',
+    marginLeft: 6,
+  },
+  roleTabTextActiveAdmin: {
+    color: colors.primaryNavy,
+    fontWeight: '800',
+  },
+  roleTabTextActiveManager: {
+    color: '#047857',
+    fontWeight: '800',
+  },
+  errorBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FEF2F2',
+    borderWidth: 1,
+    borderColor: '#FCA5A5',
+    borderRadius: borderRadius.md,
+    padding: spacing.md,
+    marginBottom: spacing.md,
+  },
+  errorIcon: {
+    marginRight: spacing.sm,
+  },
+  errorBannerText: {
+    ...typography.captionMedium,
+    color: '#B91C1C',
+    flex: 1,
+    lineHeight: 18,
+  },
+  inputContainer: {
+    marginBottom: spacing.md,
+  },
+  securityRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: spacing.lg,
+    paddingHorizontal: 2,
+  },
+  securityText: {
     ...typography.caption,
     color: colors.textMuted,
-  },
-  forgotPasswordText: {
-    ...typography.captionMedium,
-    color: colors.accentBlue,
+    marginLeft: 6,
+    fontSize: 11,
   },
   loginButton: {
     marginTop: spacing.xs,
   },
-  switchButton: {
-    marginTop: spacing.md,
+  demoSection: {
+    marginTop: spacing.xl,
+    paddingTop: spacing.lg,
+    borderTopWidth: 1,
+    borderTopColor: '#F1F5F9',
+  },
+  demoTitle: {
+    ...typography.caption,
+    color: colors.textMuted,
+    fontWeight: '700',
+    letterSpacing: 0.8,
+    marginBottom: spacing.sm,
+    textAlign: 'center',
+  },
+  demoChipsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.xs,
+    justifyContent: 'center',
+  },
+  demoChip: {
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1,
+    borderColor: '#CBD5E1',
+    borderRadius: borderRadius.full,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 6,
+  },
+  demoChipActive: {
+    backgroundColor: colors.primaryTint,
+    borderColor: colors.primaryNavy,
+  },
+  demoChipText: {
+    ...typography.caption,
+    color: colors.textPrimary,
+    fontWeight: '600',
+    fontSize: 11,
+  },
+  footerNote: {
+    ...typography.caption,
+    color: colors.textMuted,
+    textAlign: 'center',
+    marginTop: spacing.xl,
+    fontSize: 11,
   },
 });
+
+export default LoginScreen;

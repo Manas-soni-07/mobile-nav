@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, StyleSheet, ViewStyle } from 'react-native';
+import { View, Text, StyleSheet, ViewStyle, TouchableOpacity } from 'react-native';
 import { colors } from '../../theme/colors';
 import { typography } from '../../theme/typography';
 import { spacing, borderRadius, shadows } from '../../theme/spacing';
@@ -15,6 +15,7 @@ interface KPICardProps {
   badgeVariant?: BadgeVariant;
   accentColor?: string;
   style?: ViewStyle;
+  onPress?: () => void;
 }
 
 export const KPICard: React.FC<KPICardProps> = ({
@@ -26,8 +27,9 @@ export const KPICard: React.FC<KPICardProps> = ({
   badgeVariant = 'neutral',
   accentColor = colors.primaryNavy,
   style,
+  onPress,
 }) => {
-  return (
+  const content = (
     <View style={[styles.card, style]}>
       <View style={styles.topRow}>
         <View style={[styles.iconContainer, { backgroundColor: colors.surfaceSubtle }]}>
@@ -43,6 +45,16 @@ export const KPICard: React.FC<KPICardProps> = ({
       {subtitle ? <Text style={styles.subtitleText}>{subtitle}</Text> : null}
     </View>
   );
+
+  if (onPress) {
+    return (
+      <TouchableOpacity activeOpacity={0.8} onPress={onPress}>
+        {content}
+      </TouchableOpacity>
+    );
+  }
+
+  return content;
 };
 
 const styles = StyleSheet.create({

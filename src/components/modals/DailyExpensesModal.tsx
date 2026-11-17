@@ -132,13 +132,13 @@ export const DailyExpensesModal: React.FC<DailyExpensesModalProps> = ({
             <Text style={styles.formTitle}>Record Operational Expense</Text>
             <Input
               label="Expense Description / Vendor"
-              placeholder="e.g. Pool Towels & Cabana Amenities"
+              placeholder="e.g. Mandi Fresh Sabzi & Dairy Restock"
               value={title}
               onChangeText={setTitle}
             />
             <Input
-              label="Amount ($ USD)"
-              placeholder="450"
+              label="Amount (₹ INR)"
+              placeholder="15000"
               keyboardType="numeric"
               value={amount}
               onChangeText={setAmount}

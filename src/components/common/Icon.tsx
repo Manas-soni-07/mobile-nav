@@ -30,14 +30,35 @@ export type IconName =
   | 'chevron-down'
   | 'arrow-left'
   | 'alert-triangle'
+  | 'alert-circle'
   | 'refresh-cw'
   | 'check'
   | 'x'
   | 'log-out'
+  | 'log-in'
   | 'clock'
   | 'activity'
   | 'hotel'
-  | 'plus';
+  | 'plus'
+  | 'grid'
+  | 'credit-card'
+  | 'user-check'
+  | 'arrow-down-circle'
+  | 'bar-chart-2'
+  | 'database'
+  | 'settings'
+  | 'filter'
+  | 'layers'
+  | 'globe'
+  | 'map-pin'
+  | 'phone'
+  | 'edit'
+  | 'rotate-ccw'
+  | 'info'
+  | 'search'
+  | 'share-2'
+  | 'file-text'
+  | 'circle';
 
 interface IconProps {
   name: IconName | string;
@@ -826,6 +847,122 @@ export const Icon: React.FC<IconProps> = ({
                   borderRadius: strokeWidth / 2,
                 }}
               />
+            </View>
+          </View>
+        );
+
+      case 'search':
+        return (
+          <View style={{ width: size, height: size, alignItems: 'center', justifyContent: 'center' }}>
+            <View
+              style={{
+                width: size * 0.55,
+                height: size * 0.55,
+                borderRadius: (size * 0.55) / 2,
+                borderWidth: strokeWidth,
+                borderColor: color,
+                position: 'absolute',
+                top: size * 0.12,
+                left: size * 0.12,
+              }}
+            />
+            <View
+              style={{
+                position: 'absolute',
+                bottom: size * 0.12,
+                right: size * 0.14,
+                width: size * 0.35,
+                height: strokeWidth,
+                backgroundColor: color,
+                borderRadius: strokeWidth / 2,
+                transform: [{ rotate: '45deg' }],
+              }}
+            />
+          </View>
+        );
+
+      case 'share-2':
+        return (
+          <View style={{ width: size, height: size, alignItems: 'center', justifyContent: 'center' }}>
+            <View
+              style={{
+                position: 'absolute',
+                right: size * 0.1,
+                top: size * 0.1,
+                width: size * 0.24,
+                height: size * 0.24,
+                borderRadius: (size * 0.24) / 2,
+                borderWidth: strokeWidth,
+                borderColor: color,
+              }}
+            />
+            <View
+              style={{
+                position: 'absolute',
+                right: size * 0.1,
+                bottom: size * 0.1,
+                width: size * 0.24,
+                height: size * 0.24,
+                borderRadius: (size * 0.24) / 2,
+                borderWidth: strokeWidth,
+                borderColor: color,
+              }}
+            />
+            <View
+              style={{
+                position: 'absolute',
+                left: size * 0.1,
+                top: size * 0.38,
+                width: size * 0.24,
+                height: size * 0.24,
+                borderRadius: (size * 0.24) / 2,
+                borderWidth: strokeWidth,
+                borderColor: color,
+              }}
+            />
+            <View
+              style={{
+                position: 'absolute',
+                left: size * 0.28,
+                top: size * 0.3,
+                width: size * 0.45,
+                height: strokeWidth * 0.8,
+                backgroundColor: color,
+                transform: [{ rotate: '-30deg' }],
+              }}
+            />
+            <View
+              style={{
+                position: 'absolute',
+                left: size * 0.28,
+                bottom: size * 0.3,
+                width: size * 0.45,
+                height: strokeWidth * 0.8,
+                backgroundColor: color,
+                transform: [{ rotate: '30deg' }],
+              }}
+            />
+          </View>
+        );
+
+      case 'file-text':
+        return (
+          <View style={{ width: size, height: size, alignItems: 'center', justifyContent: 'center' }}>
+            <View
+              style={{
+                width: size * 0.65,
+                height: size * 0.8,
+                borderRadius: 2,
+                borderWidth: strokeWidth,
+                borderColor: color,
+                padding: 2,
+                justifyContent: 'center',
+                gap: 2,
+              }}
+            >
+              <View style={{ height: strokeWidth, width: '70%', backgroundColor: color }} />
+              <View style={{ height: strokeWidth, width: '90%', backgroundColor: color }} />
+              <View style={{ height: strokeWidth, width: '50%', backgroundColor: color }} />
             </View>
           </View>
         );

@@ -19,16 +19,36 @@ import { Input } from '../components/common/Input';
 import { Badge } from '../components/common/Badge';
 import { Icon } from '../components/common/Icon';
 import { Button } from '../components/common/Button';
-import { StaffDepartment, StaffShift, AttendanceStatus } from '../types/hotel';
+import { StaffDepartment, StaffShift, AttendanceStatus, StaffMember } from '../types/hotel';
 
 export const AttendanceScreen: React.FC = () => {
   const { goBack } = useNavigation();
-  const { staff, attendanceSummary, updateStaffAttendance, addStaffMember, selectedHotel } =
-    useHotel();
+  const {
+    staff: allStaff,
+    updateStaffAttendance,
+    addStaffMember,
+    selectedHotel,
+    hotels,
+    switchHotel,
+    currentUser,
+  } = useHotel();
 
+  // Role permissions
+  const isAdmin = currentUser?.role === 'ADMIN';
+  const managerAssignedHotelId = currentUser?.hotelId || selectedHotel.id;
+
+  // Hotel Filter: Admin can choose 'all', 'h-villa', 'h-navkar'. Manager locked.
+  const [filterHotelId, setFilterHotelId] = useState<string>(
+    isAdmin ? 'all' : managerAssignedHotelId
+  );
+
+  // Date State (Defaults to Today)
+  const todayStr = '17 Nov 2026';
+  const [selectedDate, setSelectedDate] = useState<string>('Today');
+
+  // Search & Filter
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedDept, setSelectedDept] = useState<string>('ALL');
-  const [selectedShift, setSelectedShift] = useState<string>('ALL');
 
   // Add Employee Modal
   const [showAddModal, setShowAddModal] = useState(false);
@@ -37,6 +57,10 @@ export const AttendanceScreen: React.FC = () => {
   const [newDept, setNewDept] = useState<StaffDepartment>('Front Desk');
   const [newShift, setNewShift] = useState<StaffShift>('Morning');
   const [newPhone, setNewPhone] = useState('');
+  const [newHotelId, setNewHotelId] = useState<string>(
+    isAdmin ? 'h-villa' : managerAssignedHotelId
+  );
+  const [newSalary, setNewSalary] = useState('');
 
   const departments: (StaffDepartment | 'ALL')[] = [
     'ALL',
@@ -48,62 +72,110 @@ export const AttendanceScreen: React.FC = () => {
     'Management',
   ];
 
-  const shifts: (StaffShift | 'ALL')[] = ['ALL', 'Morning', 'Afternoon', 'Night', 'Full Day'];
-
-  // Filtered staff roster
+  // Filtered staff list
   const filteredStaff = useMemo(() => {
-    return staff.filter((member) => {
+    return allStaff.filter((member) => {
+      // Hotel constraint
+      if (!isAdmin) {
+        if (member.hotelId !== managerAssignedHotelId) return false;
+      } else if (filterHotelId !== 'all') {
+        if (member.hotelId !== filterHotelId) return false;
+      }
+
+      // Search match
       const matchesSearch =
         member.fullName.toLowerCase().includes(searchQuery.toLowerCase()) ||
         member.role.toLowerCase().includes(searchQuery.toLowerCase()) ||
         member.employeeCode.toLowerCase().includes(searchQuery.toLowerCase());
 
+      // Dept match
       const matchesDept = selectedDept === 'ALL' || member.department === selectedDept;
-      const matchesShift = selectedShift === 'ALL' || member.shift === selectedShift;
 
-      return matchesSearch && matchesDept && matchesShift;
+      return matchesSearch && matchesDept;
     });
-  }, [staff, searchQuery, selectedDept, selectedShift]);
+  }, [allStaff, isAdmin, managerAssignedHotelId, filterHotelId, searchQuery, selectedDept]);
 
-  const handleCycleStatus = (staffId: string, currentStatus: AttendanceStatus) => {
-    const statusCycle: AttendanceStatus[] = ['present', 'on_leave', 'absent', 'late'];
-    const nextIndex = (statusCycle.indexOf(currentStatus) + 1) % statusCycle.length;
-    const nextStatus = statusCycle[nextIndex];
-    const checkInTime = nextStatus === 'present' ? '08:00 AM' : nextStatus === 'late' ? '08:45 AM' : undefined;
+  // Reactive Attendance Counts
+  const counts = useMemo(() => {
+    const total = filteredStaff.length;
+    const present = filteredStaff.filter(
+      (s) => s.status === 'present' || s.status === 'late'
+    ).length;
+    const halfDay = filteredStaff.filter((s) => s.status === 'half_day').length;
+    const absent = filteredStaff.filter((s) => s.status === 'absent').length;
+    const onLeave = filteredStaff.filter((s) => s.status === 'on_leave').length;
+    return { total, present, halfDay, absent, onLeave };
+  }, [filteredStaff]);
 
-    updateStaffAttendance(staffId, nextStatus, checkInTime);
+  // Set individual staff status
+  const handleSetStatus = (staffId: string, status: AttendanceStatus) => {
+    const checkIn =
+      status === 'present' ? '08:00 AM' : status === 'half_day' ? '01:00 PM' : undefined;
+    updateStaffAttendance(staffId, status, checkIn);
   };
 
+  // Mark All Present Shortcut
+  const handleMarkAllPresent = () => {
+    if (filteredStaff.length === 0) {
+      Alert.alert('No Staff', 'No staff members currently found to mark.');
+      return;
+    }
+    filteredStaff.forEach((member) => {
+      updateStaffAttendance(member.id, 'present', '08:00 AM');
+    });
+    Alert.alert(
+      'Attendance Marked',
+      `All ${filteredStaff.length} employees have been marked as Present for ${selectedDate === 'Today' ? todayStr : selectedDate}.`
+    );
+  };
+
+  // Create Staff Member
   const handleCreateStaff = () => {
     if (!newFullName.trim() || !newRole.trim()) {
       Alert.alert('Required Fields', 'Please enter employee full name and job title.');
       return;
     }
 
+    const salaryVal = parseFloat(newSalary) || 18000;
+
     addStaffMember({
-      hotelId: selectedHotel.id,
+      hotelId: isAdmin ? newHotelId : managerAssignedHotelId,
       fullName: newFullName.trim(),
       role: newRole.trim(),
       department: newDept,
       shift: newShift,
       status: 'present',
       checkInTime: '08:00 AM',
-      phone: newPhone.trim() || '+1 (555) 000-0000',
+      phone: newPhone.trim() || '+91 98290 00000',
+      monthlySalary: salaryVal,
     });
 
     setNewFullName('');
     setNewRole('');
     setNewPhone('');
+    setNewSalary('');
     setShowAddModal(false);
+    Alert.alert('Staff Added', `${newFullName.trim()} has been added to the active roster.`);
+  };
+
+  const getHotelName = (id: string) => {
+    const h = hotels.find((item) => item.id === id);
+    return h ? h.name : id;
   };
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      {/* Top Header */}
+      {/* Header */}
       <Header
-        title="Staff Attendance"
-        subtitle={selectedHotel.name}
-        hotelBadge={`${attendanceSummary.presentStaff}/${attendanceSummary.totalStaff} ON DUTY`}
+        title="Staff Daily Attendance"
+        subtitle={
+          isAdmin
+            ? filterHotelId === 'all'
+              ? 'Consolidated - All Properties'
+              : getHotelName(filterHotelId)
+            : selectedHotel.name
+        }
+        hotelBadge={`${counts.present}/${counts.total} ON DUTY`}
         showBack
         onBack={goBack}
         rightAction={
@@ -118,46 +190,128 @@ export const AttendanceScreen: React.FC = () => {
       />
 
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-        {/* KPI Counter Card */}
+        {/* Hotel Filter Pills (Admin Only) */}
+        {isAdmin ? (
+          <View style={styles.hotelFilterContainer}>
+            <Text style={styles.sectionLabel}>HOTEL PROPERTY AUDIT:</Text>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.hotelPillsRow}
+            >
+              <TouchableOpacity
+                onPress={() => setFilterHotelId('all')}
+                style={[styles.hotelPill, filterHotelId === 'all' && styles.hotelPillActive]}
+              >
+                <Text
+                  style={[
+                    styles.hotelPillText,
+                    filterHotelId === 'all' && styles.hotelPillTextActive,
+                  ]}
+                >
+                  All Hotels
+                </Text>
+              </TouchableOpacity>
+              {hotels.map((h) => {
+                const isActive = filterHotelId === h.id;
+                return (
+                  <TouchableOpacity
+                    key={h.id}
+                    onPress={() => setFilterHotelId(h.id)}
+                    style={[styles.hotelPill, isActive && styles.hotelPillActive]}
+                  >
+                    <Text style={[styles.hotelPillText, isActive && styles.hotelPillTextActive]}>
+                      {h.name}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+          </View>
+        ) : (
+          <View style={styles.managerNoticeCard}>
+            <Icon name="shield" size={14} color="#059669" />
+            <Text style={styles.managerNoticeText}>
+              Locked to your assigned hotel: <Text style={{ fontWeight: '700' }}>{selectedHotel.name}</Text>
+            </Text>
+          </View>
+        )}
+
+        {/* Date Selector Bar */}
+        <View style={styles.dateSelectorCard}>
+          <View style={styles.dateLabelRow}>
+            <Icon name="calendar" size={15} color={colors.primaryNavy} />
+            <Text style={styles.dateMainText}>
+              {selectedDate === 'Today' ? `Today: ${todayStr}` : selectedDate}
+            </Text>
+          </View>
+          <View style={styles.datePillsRow}>
+            {['Yesterday', 'Today', 'Tomorrow'].map((d) => {
+              const isSelected = selectedDate === d;
+              return (
+                <TouchableOpacity
+                  key={d}
+                  onPress={() => setSelectedDate(d)}
+                  style={[styles.datePill, isSelected && styles.datePillActive]}
+                >
+                  <Text style={[styles.datePillText, isSelected && styles.datePillTextActive]}>
+                    {d}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        </View>
+
+        {/* KPI Counter Checklist Bar */}
         <View style={styles.summaryBar}>
           <View style={styles.statCol}>
-            <Text style={styles.statNumber}>{attendanceSummary.totalStaff}</Text>
+            <Text style={styles.statNumber}>{counts.total}</Text>
             <Text style={styles.statLabel}>Total Staff</Text>
           </View>
           <View style={styles.statDivider} />
           <View style={styles.statCol}>
-            <Text style={[styles.statNumber, { color: colors.success }]}>
-              {attendanceSummary.presentStaff}
-            </Text>
+            <Text style={[styles.statNumber, { color: '#059669' }]}>{counts.present}</Text>
             <Text style={styles.statLabel}>Present</Text>
           </View>
           <View style={styles.statDivider} />
           <View style={styles.statCol}>
-            <Text style={[styles.statNumber, { color: colors.warning }]}>
-              {attendanceSummary.onLeaveStaff}
-            </Text>
-            <Text style={styles.statLabel}>On Leave</Text>
+            <Text style={[styles.statNumber, { color: '#D97706' }]}>{counts.halfDay}</Text>
+            <Text style={styles.statLabel}>Half Day</Text>
           </View>
           <View style={styles.statDivider} />
           <View style={styles.statCol}>
-            <Text style={[styles.statNumber, { color: colors.error }]}>
-              {attendanceSummary.absentStaff}
-            </Text>
+            <Text style={[styles.statNumber, { color: '#DC2626' }]}>{counts.absent}</Text>
             <Text style={styles.statLabel}>Absent</Text>
+          </View>
+          <View style={styles.statDivider} />
+          <View style={styles.statCol}>
+            <Text style={[styles.statNumber, { color: '#64748B' }]}>{counts.onLeave}</Text>
+            <Text style={styles.statLabel}>Leave</Text>
           </View>
         </View>
 
-        {/* Search Bar */}
+        {/* Mark All Present Shortcut Action */}
+        <TouchableOpacity
+          activeOpacity={0.8}
+          onPress={handleMarkAllPresent}
+          style={styles.markAllBtn}
+        >
+          <Icon name="check-circle" size={16} color="#FFFFFF" />
+          <Text style={styles.markAllBtnText}>Mark All Present for Today</Text>
+        </TouchableOpacity>
+
+        {/* Search Input */}
         <Input
-          placeholder="Search by name, role, or employee code..."
+          placeholder="Search staff by name, role, or employee code..."
           value={searchQuery}
           onChangeText={setSearchQuery}
-          leftIcon="users"
+          leftIcon="search"
           style={styles.searchInput}
         />
 
         {/* Department Filter Pills */}
-        <Text style={styles.filterLabel}>DEPARTMENT FILTER:</Text>
+        <Text style={styles.sectionLabel}>DEPARTMENT FILTER:</Text>
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
@@ -179,59 +333,25 @@ export const AttendanceScreen: React.FC = () => {
           })}
         </ScrollView>
 
-        {/* Shift Filter Pills */}
-        <Text style={styles.filterLabel}>SHIFT FILTER:</Text>
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.filterScroll}
-        >
-          {shifts.map((shift) => {
-            const isActive = selectedShift === shift;
-            return (
-              <TouchableOpacity
-                key={shift}
-                onPress={() => setSelectedShift(shift)}
-                style={[styles.filterPill, isActive && styles.filterPillActive]}
-              >
-                <Text style={[styles.filterPillText, isActive && styles.filterPillTextActive]}>
-                  {shift}
-                </Text>
-              </TouchableOpacity>
-            );
-          })}
-        </ScrollView>
-
-        {/* Roster Section Title */}
+        {/* Checklist Title & Count */}
         <View style={styles.rosterHeader}>
           <Text style={styles.rosterTitle}>
-            ACTIVE ROSTER ({filteredStaff.length} EMPLOYEES)
+            DAILY ATTENDANCE CHECKLIST ({filteredStaff.length} EMPLOYEES)
           </Text>
-          <Text style={styles.rosterHint}>Tap status to cycle</Text>
+          <Text style={styles.rosterHint}>One-tap direct marking</Text>
         </View>
 
-        {/* Staff Members List */}
+        {/* Staff Checklist Cards */}
         {filteredStaff.map((member) => {
-          const isPresent = member.status === 'present';
-          const isLate = member.status === 'late';
-          const isOnLeave = member.status === 'on_leave';
-
-          const badgeVariant = isPresent
-            ? 'success'
-            : isLate
-            ? 'warning'
-            : isOnLeave
-            ? 'neutral'
-            : 'error';
+          const isPresent = member.status === 'present' || member.status === 'late';
+          const isHalfDay = member.status === 'half_day';
+          const isAbsent = member.status === 'absent';
+          const isLeave = member.status === 'on_leave';
 
           return (
-            <TouchableOpacity
-              key={member.id}
-              activeOpacity={0.7}
-              onPress={() => handleCycleStatus(member.id, member.status)}
-              style={styles.staffCard}
-            >
-              <View style={styles.staffCardRow}>
+            <View key={member.id} style={styles.staffCard}>
+              {/* Member Profile Row */}
+              <View style={styles.staffCardTopRow}>
                 <View style={styles.avatarCircle}>
                   <Text style={styles.avatarInitials}>
                     {member.fullName
@@ -242,36 +362,119 @@ export const AttendanceScreen: React.FC = () => {
                   </Text>
                 </View>
 
-                <View style={styles.staffInfo}>
-                  <View style={styles.nameRow}>
+                <View style={styles.staffInfoCol}>
+                  <View style={styles.nameBadgeRow}>
                     <Text style={styles.staffName}>{member.fullName}</Text>
                     <Badge
-                      label={member.status.replace('_', ' ').toUpperCase()}
-                      variant={badgeVariant}
+                      label={member.employeeCode}
+                      variant="neutral"
                       size="sm"
                     />
                   </View>
                   <Text style={styles.staffRole}>
                     {member.role} • {member.department}
                   </Text>
-                  <View style={styles.shiftDetailsRow}>
-                    <Text style={styles.shiftText}>Shift: {member.shift}</Text>
-                    {member.checkInTime && (
-                      <Text style={styles.checkInText}>• In: {member.checkInTime}</Text>
+                  <View style={styles.metaRow}>
+                    <Text style={styles.metaText}>Shift: {member.shift}</Text>
+                    {member.phone && <Text style={styles.metaText}> • 📞 {member.phone}</Text>}
+                    {isAdmin && filterHotelId === 'all' && (
+                      <Text style={styles.hotelSubText}>
+                        {' '}• 🏨 {getHotelName(member.hotelId)}
+                      </Text>
                     )}
-                    <Text style={styles.empCodeText}>• {member.employeeCode}</Text>
                   </View>
                 </View>
               </View>
-            </TouchableOpacity>
+
+              {/* Status Action Buttons Bar: [ Present ] [ Half Day ] [ Absent ] [ Leave ] */}
+              <View style={styles.statusButtonsContainer}>
+                {/* Present Button */}
+                <TouchableOpacity
+                  activeOpacity={0.8}
+                  onPress={() => handleSetStatus(member.id, 'present')}
+                  style={[
+                    styles.statusBtn,
+                    isPresent ? styles.statusBtnPresentActive : styles.statusBtnInactive,
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.statusBtnText,
+                      isPresent ? styles.statusBtnTextPresentActive : styles.statusBtnTextInactive,
+                    ]}
+                  >
+                    ✓ Present
+                  </Text>
+                </TouchableOpacity>
+
+                {/* Half Day Button */}
+                <TouchableOpacity
+                  activeOpacity={0.8}
+                  onPress={() => handleSetStatus(member.id, 'half_day')}
+                  style={[
+                    styles.statusBtn,
+                    isHalfDay ? styles.statusBtnHalfActive : styles.statusBtnInactive,
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.statusBtnText,
+                      isHalfDay ? styles.statusBtnTextHalfActive : styles.statusBtnTextInactive,
+                    ]}
+                  >
+                    ½ Half Day
+                  </Text>
+                </TouchableOpacity>
+
+                {/* Absent Button */}
+                <TouchableOpacity
+                  activeOpacity={0.8}
+                  onPress={() => handleSetStatus(member.id, 'absent')}
+                  style={[
+                    styles.statusBtn,
+                    isAbsent ? styles.statusBtnAbsentActive : styles.statusBtnInactive,
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.statusBtnText,
+                      isAbsent ? styles.statusBtnTextAbsentActive : styles.statusBtnTextInactive,
+                    ]}
+                  >
+                    ✗ Absent
+                  </Text>
+                </TouchableOpacity>
+
+                {/* Leave Button */}
+                <TouchableOpacity
+                  activeOpacity={0.8}
+                  onPress={() => handleSetStatus(member.id, 'on_leave')}
+                  style={[
+                    styles.statusBtn,
+                    isLeave ? styles.statusBtnLeaveActive : styles.statusBtnInactive,
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.statusBtnText,
+                      isLeave ? styles.statusBtnTextLeaveActive : styles.statusBtnTextInactive,
+                    ]}
+                  >
+                    ○ Leave
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </View>
           );
         })}
 
         {filteredStaff.length === 0 && (
           <View style={styles.emptyState}>
-            <Icon name="users" size={36} color={colors.textMuted} />
+            <Icon name="users" size={38} color={colors.textMuted} />
             <Text style={styles.emptyTitle}>No Employees Found</Text>
-            <Text style={styles.emptyDesc}>Try adjusting your search query or filter selection.</Text>
+            <Text style={styles.emptyDesc}>
+              No staff members match the selected hotel, department, or search query.
+            </Text>
           </View>
         )}
       </ScrollView>
@@ -281,32 +484,61 @@ export const AttendanceScreen: React.FC = () => {
         <SafeAreaView style={styles.safeArea}>
           <View style={styles.modalHeader}>
             <Text style={styles.modalTitle}>Add Employee to Roster</Text>
-            <TouchableOpacity
-              onPress={() => setShowAddModal(false)}
-              style={styles.modalCloseBtn}
-            >
+            <TouchableOpacity onPress={() => setShowAddModal(false)} style={styles.modalCloseBtn}>
               <Icon name="x" size={18} color={colors.textSecondary} />
             </TouchableOpacity>
           </View>
 
           <ScrollView contentContainerStyle={styles.modalBody}>
+            {/* If Admin, choose Hotel */}
+            {isAdmin && (
+              <View style={styles.formSection}>
+                <Text style={styles.formSectionLabel}>ASSIGN HOTEL PROPERTY:</Text>
+                <View style={styles.formPillGrid}>
+                  {hotels.map((h) => (
+                    <TouchableOpacity
+                      key={h.id}
+                      onPress={() => setNewHotelId(h.id)}
+                      style={[styles.formPill, newHotelId === h.id && styles.formPillActive]}
+                    >
+                      <Text
+                        style={[
+                          styles.formPillText,
+                          newHotelId === h.id && styles.formPillTextActive,
+                        ]}
+                      >
+                        {h.name}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </View>
+            )}
+
             <Input
               label="Full Name"
-              placeholder="e.g. Julian Thorne"
+              placeholder="e.g. Rameshwar Sharma"
               value={newFullName}
               onChangeText={setNewFullName}
             />
             <Input
               label="Job Title / Role"
-              placeholder="e.g. Front Desk Officer"
+              placeholder="e.g. Receptionist / Housekeeping Supervisor"
               value={newRole}
               onChangeText={setNewRole}
             />
             <Input
               label="Contact Phone"
-              placeholder="+1 (555) 123-4567"
+              placeholder="+91 98290 12345"
               value={newPhone}
               onChangeText={setNewPhone}
+            />
+            <Input
+              label="Monthly Base Salary (₹)"
+              placeholder="18000"
+              value={newSalary}
+              onChangeText={setNewSalary}
+              keyboardType="numeric"
             />
 
             <Text style={styles.formSectionLabel}>DEPARTMENT:</Text>
@@ -320,7 +552,10 @@ export const AttendanceScreen: React.FC = () => {
                     style={[styles.formPill, newDept === dept && styles.formPillActive]}
                   >
                     <Text
-                      style={[styles.formPillText, newDept === dept && styles.formPillTextActive]}
+                      style={[
+                        styles.formPillText,
+                        newDept === dept && styles.formPillTextActive,
+                      ]}
                     >
                       {dept}
                     </Text>
@@ -330,28 +565,26 @@ export const AttendanceScreen: React.FC = () => {
 
             <Text style={styles.formSectionLabel}>SHIFT:</Text>
             <View style={styles.formPillGrid}>
-              {shifts
-                .filter((s) => s !== 'ALL')
-                .map((shift) => (
-                  <TouchableOpacity
-                    key={shift}
-                    onPress={() => setNewShift(shift as StaffShift)}
-                    style={[styles.formPill, newShift === shift && styles.formPillActive]}
+              {(['Morning', 'Afternoon', 'Night', 'Full Day'] as StaffShift[]).map((shift) => (
+                <TouchableOpacity
+                  key={shift}
+                  onPress={() => setNewShift(shift)}
+                  style={[styles.formPill, newShift === shift && styles.formPillActive]}
+                >
+                  <Text
+                    style={[
+                      styles.formPillText,
+                      newShift === shift && styles.formPillTextActive,
+                    ]}
                   >
-                    <Text
-                      style={[
-                        styles.formPillText,
-                        newShift === shift && styles.formPillTextActive,
-                      ]}
-                    >
-                      {shift}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
+                    {shift}
+                  </Text>
+                </TouchableOpacity>
+              ))}
             </View>
 
             <Button
-              title="Save Employee to Roster"
+              title="Save Employee"
               variant="primary"
               size="lg"
               onPress={handleCreateStaff}
@@ -370,18 +603,116 @@ const styles = StyleSheet.create({
     backgroundColor: colors.background,
   },
   scrollContent: {
-    padding: spacing.lg,
-    paddingBottom: spacing.xxxl,
+    padding: spacing.md,
+    paddingBottom: spacing.xxl,
   },
   addBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: borderRadius.sm,
+    width: 34,
+    height: 34,
+    borderRadius: borderRadius.full,
     backgroundColor: colors.primaryTint,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
     borderColor: '#D0E1F2',
+  },
+  hotelFilterContainer: {
+    marginBottom: spacing.sm,
+  },
+  sectionLabel: {
+    ...typography.overline,
+    fontSize: 9,
+    color: colors.textSecondary,
+    marginBottom: 4,
+    letterSpacing: 0.8,
+  },
+  hotelPillsRow: {
+    paddingBottom: spacing.xs,
+  },
+  hotelPill: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: borderRadius.full,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+    marginRight: 6,
+  },
+  hotelPillActive: {
+    backgroundColor: colors.primaryNavy,
+    borderColor: colors.primaryNavy,
+  },
+  hotelPillText: {
+    ...typography.caption,
+    fontWeight: '600',
+    color: colors.textSecondary,
+  },
+  hotelPillTextActive: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+  },
+  managerNoticeCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#ECFDF5',
+    padding: spacing.sm,
+    borderRadius: borderRadius.md,
+    borderWidth: 1,
+    borderColor: '#A7F3D0',
+    marginBottom: spacing.sm,
+    gap: 6,
+  },
+  managerNoticeText: {
+    ...typography.caption,
+    fontSize: 11,
+    color: '#065F46',
+  },
+  dateSelectorCard: {
+    backgroundColor: colors.surface,
+    padding: spacing.sm,
+    borderRadius: borderRadius.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    marginBottom: spacing.sm,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    ...shadows.sm,
+  },
+  dateLabelRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  dateMainText: {
+    ...typography.caption,
+    fontWeight: '700',
+    color: colors.primaryNavy,
+  },
+  datePillsRow: {
+    flexDirection: 'row',
+    gap: 4,
+  },
+  datePill: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: borderRadius.sm,
+    backgroundColor: colors.surfaceSubtle,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  datePillActive: {
+    backgroundColor: colors.accentBlue,
+    borderColor: colors.accentBlue,
+  },
+  datePillText: {
+    ...typography.caption,
+    fontSize: 10,
+    color: colors.textSecondary,
+  },
+  datePillTextActive: {
+    color: '#FFFFFF',
+    fontWeight: '700',
   },
   summaryBar: {
     flexDirection: 'row',
@@ -392,7 +723,7 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     justifyContent: 'space-around',
     alignItems: 'center',
-    marginBottom: spacing.md,
+    marginBottom: spacing.sm,
     ...shadows.sm,
   },
   statCol: {
@@ -413,19 +744,28 @@ const styles = StyleSheet.create({
     height: 28,
     backgroundColor: colors.border,
   },
+  markAllBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#059669',
+    paddingVertical: 10,
+    borderRadius: borderRadius.md,
+    marginBottom: spacing.md,
+    gap: 8,
+    ...shadows.sm,
+  },
+  markAllBtnText: {
+    ...typography.body2,
+    fontWeight: '700',
+    color: '#FFFFFF',
+  },
   searchInput: {
     marginBottom: spacing.xs,
   },
-  filterLabel: {
-    ...typography.overline,
-    fontSize: 9,
-    color: colors.textSecondary,
-    marginTop: spacing.xs,
-    marginBottom: 4,
-  },
   filterScroll: {
     paddingBottom: spacing.xs,
-    marginBottom: 2,
+    marginBottom: spacing.sm,
   },
   filterPill: {
     paddingHorizontal: 10,
@@ -453,7 +793,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginTop: spacing.md,
     marginBottom: spacing.xs,
   },
   rosterTitle: {
@@ -474,122 +813,171 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     ...shadows.sm,
   },
-  staffCardRow: {
+  staffCardTopRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    marginBottom: spacing.sm,
   },
   avatarCircle: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
-    backgroundColor: colors.primaryNavy,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#E0E7FF',
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: spacing.md,
   },
   avatarInitials: {
-    ...typography.bodySemiBold,
-    color: colors.surface,
+    ...typography.body2,
+    fontWeight: '700',
+    color: '#3730A3',
   },
-  staffInfo: {
+  staffInfoCol: {
     flex: 1,
   },
-  nameRow: {
+  nameBadgeRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
+    justifyContent: 'space-between',
   },
   staffName: {
-    ...typography.bodySemiBold,
-    color: colors.textPrimary,
+    ...typography.subtitle1,
+    color: colors.primaryNavy,
+    fontWeight: '700',
   },
   staffRole: {
     ...typography.caption,
     color: colors.textSecondary,
     marginTop: 1,
   },
-  shiftDetailsRow: {
+  metaRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginTop: 3,
+    flexWrap: 'wrap',
+    marginTop: 2,
   },
-  shiftText: {
+  metaText: {
     ...typography.caption,
     fontSize: 10,
     color: colors.textMuted,
   },
-  checkInText: {
-    ...typography.captionBold,
-    fontSize: 10,
-    color: colors.success,
-    marginLeft: 4,
-  },
-  empCodeText: {
+  hotelSubText: {
     ...typography.caption,
     fontSize: 10,
-    color: colors.textMuted,
-    marginLeft: 4,
+    color: colors.accentBlue,
+    fontWeight: '600',
   },
-  emptyState: {
+  statusButtonsContainer: {
+    flexDirection: 'row',
+    gap: 6,
+    paddingTop: spacing.xs,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+  },
+  statusBtn: {
+    flex: 1,
+    paddingVertical: 7,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: spacing.xxl,
+    borderRadius: borderRadius.sm,
+    borderWidth: 1,
+  },
+  statusBtnInactive: {
+    backgroundColor: colors.surfaceSubtle,
+    borderColor: colors.border,
+  },
+  statusBtnPresentActive: {
+    backgroundColor: '#059669',
+    borderColor: '#059669',
+  },
+  statusBtnHalfActive: {
+    backgroundColor: '#D97706',
+    borderColor: '#D97706',
+  },
+  statusBtnAbsentActive: {
+    backgroundColor: '#DC2626',
+    borderColor: '#DC2626',
+  },
+  statusBtnLeaveActive: {
+    backgroundColor: '#475569',
+    borderColor: '#475569',
+  },
+  statusBtnText: {
+    ...typography.caption,
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  statusBtnTextInactive: {
+    color: colors.textSecondary,
+  },
+  statusBtnTextPresentActive: {
+    color: '#FFFFFF',
+  },
+  statusBtnTextHalfActive: {
+    color: '#FFFFFF',
+  },
+  statusBtnTextAbsentActive: {
+    color: '#FFFFFF',
+  },
+  statusBtnTextLeaveActive: {
+    color: '#FFFFFF',
+  },
+  emptyState: {
+    padding: spacing.xl,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   emptyTitle: {
     ...typography.h4,
-    color: colors.textPrimary,
+    color: colors.textSecondary,
     marginTop: spacing.md,
   },
   emptyDesc: {
     ...typography.caption,
-    color: colors.textSecondary,
+    color: colors.textMuted,
     textAlign: 'center',
-    marginTop: 2,
+    marginTop: spacing.xs,
   },
   modalHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: spacing.lg,
+    padding: spacing.md,
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
-    backgroundColor: colors.surface,
   },
   modalTitle: {
-    ...typography.h4,
+    ...typography.h3,
     color: colors.primaryNavy,
   },
   modalCloseBtn: {
-    width: 32,
-    height: 32,
-    borderRadius: borderRadius.xs,
-    backgroundColor: colors.surfaceSubtle,
-    alignItems: 'center',
-    justifyContent: 'center',
+    padding: spacing.xs,
   },
   modalBody: {
-    padding: spacing.lg,
+    padding: spacing.md,
+  },
+  formSection: {
+    marginBottom: spacing.md,
   },
   formSectionLabel: {
     ...typography.overline,
-    fontSize: 10,
     color: colors.textSecondary,
+    marginBottom: spacing.xs,
     marginTop: spacing.sm,
-    marginBottom: 6,
   },
   formPillGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
+    gap: 6,
+    marginBottom: spacing.sm,
   },
   formPill: {
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: borderRadius.xs,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: borderRadius.sm,
     backgroundColor: colors.surfaceSubtle,
     borderWidth: 1,
     borderColor: colors.border,
-    marginRight: 6,
-    marginBottom: 6,
   },
   formPillActive: {
     backgroundColor: colors.primaryNavy,
@@ -597,11 +985,10 @@ const styles = StyleSheet.create({
   },
   formPillText: {
     ...typography.caption,
-    fontSize: 11,
     color: colors.textSecondary,
   },
   formPillTextActive: {
-    color: colors.surface,
+    color: '#FFFFFF',
     fontWeight: '700',
   },
 });

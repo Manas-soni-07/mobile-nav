@@ -8,6 +8,7 @@ import {
   SafeAreaView,
   Modal,
   Alert,
+  Share,
 } from 'react-native';
 import { colors } from '../theme/colors';
 import { typography } from '../theme/typography';
@@ -25,12 +26,23 @@ import { ChargeCategory, FolioStatus } from '../types/hotel';
 export const BillingFoliosScreen: React.FC = () => {
   const { goBack } = useNavigation();
   const {
-    folios,
-    billingSummary,
+    folios: allFolios,
     settleFolio,
     addFolioCharge,
     selectedHotel,
+    hotels,
+    switchHotel,
+    currentUser,
   } = useHotel();
+
+  // Role permissions
+  const isAdmin = currentUser?.role === 'ADMIN';
+  const managerAssignedHotelId = currentUser?.hotelId || selectedHotel.id;
+
+  // Hotel filter
+  const [filterHotelId, setFilterHotelId] = useState<string>(
+    isAdmin ? 'all' : managerAssignedHotelId
+  );
 
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedStatus, setSelectedStatus] = useState<string>('ALL');
@@ -42,24 +54,73 @@ export const BillingFoliosScreen: React.FC = () => {
   const [chargeAmount, setChargeAmount] = useState('');
   const [chargeCategory, setChargeCategory] = useState<ChargeCategory>('dining');
 
+  // Settle Modal State
+  const [settleFolioId, setSettleFolioId] = useState<string | null>(null);
+  const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<string>('UPI (Google Pay / PhonePe QR)');
+
   // Receipt Modal State
   const [receiptFolioId, setReceiptFolioId] = useState<string | null>(null);
 
   const statusFilters = ['ALL', 'open', 'settled'];
-  const categories: ChargeCategory[] = ['dining', 'spa', 'minibar', 'service', 'room'];
 
+  // Normal hotel categories
+  const categories: { key: ChargeCategory; label: string }[] = [
+    { key: 'room', label: 'Room Rent' },
+    { key: 'extra_bed', label: 'Extra Bed / Mattress' },
+    { key: 'dining', label: 'Food / Tea / Coffee' },
+    { key: 'water', label: 'Mineral Water' },
+    { key: 'laundry', label: 'Laundry Service' },
+    { key: 'service', label: 'Misc Service' },
+  ];
+
+  const paymentMethods = [
+    'UPI (Google Pay / PhonePe QR)',
+    'Cash Voucher',
+    'RuPay / Debit / Credit Card',
+    'NEFT / Bank Transfer',
+  ];
+
+  // Filtered folios
   const filteredFolios = useMemo(() => {
-    return folios.filter((f) => {
+    return allFolios.filter((f) => {
+      // Hotel isolation
+      if (!isAdmin) {
+        if (f.hotelId !== managerAssignedHotelId) return false;
+      } else if (filterHotelId !== 'all') {
+        if (f.hotelId !== filterHotelId) return false;
+      }
+
+      // Search match
       const matchesSearch =
         f.guestName.toLowerCase().includes(searchQuery.toLowerCase()) ||
         f.invoiceNumber.toLowerCase().includes(searchQuery.toLowerCase()) ||
         f.roomNumber.includes(searchQuery);
 
+      // Status match
       const matchesStatus = selectedStatus === 'ALL' || f.status === selectedStatus;
 
       return matchesSearch && matchesStatus;
     });
-  }, [folios, searchQuery, selectedStatus]);
+  }, [allFolios, isAdmin, managerAssignedHotelId, filterHotelId, searchQuery, selectedStatus]);
+
+  // Aggregate metrics
+  const summaryMetrics = useMemo(() => {
+    const settledTotal = filteredFolios
+      .filter((f) => f.status === 'settled')
+      .reduce((sum, f) => sum + f.paidAmount, 0);
+
+    const outstandingTotal = filteredFolios
+      .filter((f) => f.status === 'open')
+      .reduce((sum, f) => sum + f.balanceDue, 0);
+
+    const openCount = filteredFolios.filter((f) => f.status === 'open').length;
+
+    return {
+      settledTotal,
+      outstandingTotal,
+      openCount,
+    };
+  }, [filteredFolios]);
 
   const handleAddCharge = () => {
     if (!targetFolioId || !chargeDesc.trim()) {
@@ -81,44 +142,147 @@ export const BillingFoliosScreen: React.FC = () => {
     setTargetFolioId(null);
     setChargeDesc('');
     setChargeAmount('');
+    Alert.alert('Charge Added', `₹ ${amt} posted to guest folio.`);
   };
 
-  const handleSettle = (folioId: string) => {
-    settleFolio(folioId, 'Credit Card (Amex Terminal)');
-    Alert.alert('Folio Settled', 'Payment confirmed and ledger marked as settled.');
+  const handleConfirmSettle = () => {
+    if (!settleFolioId) return;
+
+    settleFolio(settleFolioId, selectedPaymentMethod);
+    const settledFolio = allFolios.find((f) => f.id === settleFolioId);
+    setSettleFolioId(null);
+
+    Alert.alert(
+      'Payment Recorded',
+      `Folio for ${settledFolio?.guestName || 'Guest'} settled successfully via ${selectedPaymentMethod}.`
+    );
   };
 
-  const receiptFolio = folios.find((f) => f.id === receiptFolioId);
+  const getHotelName = (id: string) => {
+    const h = hotels.find((item) => item.id === id);
+    return h ? h.name : id;
+  };
+
+  const receiptFolio = allFolios.find((f) => f.id === receiptFolioId);
+  const folioBeingSettled = allFolios.find((f) => f.id === settleFolioId);
+
+  const handleShareReceipt = async () => {
+    if (!receiptFolio) return;
+    const hName = getHotelName(receiptFolio.hotelId);
+    const receiptText = `==============================
+${hName.toUpperCase()}
+GST TAX INVOICE / GUEST RECEIPT
+==============================
+Invoice No: ${receiptFolio.invoiceNumber}
+Date: ${receiptFolio.createdAt}
+Guest: ${receiptFolio.guestName}
+Room No: ${receiptFolio.roomNumber}
+Status: ${receiptFolio.status.toUpperCase()}
+
+--- CHARGES BREAKDOWN ---
+${receiptFolio.items.map((i) => `${i.description}: ₹ ${i.amount.toLocaleString('en-IN')}`).join('\n')}
+------------------------------
+Subtotal: ₹ ${receiptFolio.subtotal.toLocaleString('en-IN')}
+GST (18%): ₹ ${receiptFolio.taxAmount.toLocaleString('en-IN')}
+Total Billed: ₹ ${receiptFolio.totalAmount.toLocaleString('en-IN')}
+Amount Paid: ₹ ${receiptFolio.paidAmount.toLocaleString('en-IN')}
+Balance Due: ₹ ${receiptFolio.balanceDue.toLocaleString('en-IN')}
+Payment Mode: ${receiptFolio.paymentMethod || 'Cash / UPI'}
+==============================
+Thank you for staying at ${hName}!`;
+
+    try {
+      await Share.share({
+        title: `Receipt ${receiptFolio.invoiceNumber}`,
+        message: receiptText,
+      });
+    } catch {
+      Alert.alert('Receipt', receiptText);
+    }
+  };
 
   return (
     <SafeAreaView style={styles.safeArea}>
       <Header
         title="Billing & Folios"
-        subtitle={selectedHotel.name}
-        hotelBadge={`${billingSummary.todaySettlements} SETTLED`}
+        subtitle={
+          isAdmin
+            ? filterHotelId === 'all'
+              ? 'Consolidated - All Properties'
+              : getHotelName(filterHotelId)
+            : selectedHotel.name
+        }
+        hotelBadge={`₹ ${summaryMetrics.settledTotal.toLocaleString('en-IN')} SETTLED`}
         showBack
         onBack={goBack}
       />
 
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+        {/* Hotel Filter (Admin Only) */}
+        {isAdmin ? (
+          <View style={styles.hotelFilterContainer}>
+            <Text style={styles.sectionLabel}>HOTEL PROPERTY AUDIT:</Text>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.hotelPillsRow}
+            >
+              <TouchableOpacity
+                onPress={() => setFilterHotelId('all')}
+                style={[styles.hotelPill, filterHotelId === 'all' && styles.hotelPillActive]}
+              >
+                <Text
+                  style={[
+                    styles.hotelPillText,
+                    filterHotelId === 'all' && styles.hotelPillTextActive,
+                  ]}
+                >
+                  All Hotels
+                </Text>
+              </TouchableOpacity>
+              {hotels.map((h) => {
+                const isActive = filterHotelId === h.id;
+                return (
+                  <TouchableOpacity
+                    key={h.id}
+                    onPress={() => setFilterHotelId(h.id)}
+                    style={[styles.hotelPill, isActive && styles.hotelPillActive]}
+                  >
+                    <Text style={[styles.hotelPillText, isActive && styles.hotelPillTextActive]}>
+                      {h.name}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+          </View>
+        ) : (
+          <View style={styles.managerNoticeCard}>
+            <Icon name="shield" size={14} color="#059669" />
+            <Text style={styles.managerNoticeText}>
+              Locked to your assigned hotel: <Text style={{ fontWeight: '700' }}>{selectedHotel.name}</Text>
+            </Text>
+          </View>
+        )}
+
         {/* Financial Overview Card */}
         <View style={styles.summaryCard}>
           <View style={styles.statCol}>
             <Text style={[styles.statNum, { color: colors.success }]}>
-              {billingSummary.todaySettlements}
+              ₹ {summaryMetrics.settledTotal.toLocaleString('en-IN')}
             </Text>
-            <Text style={styles.statLabel}>Settled Today</Text>
+            <Text style={styles.statLabel}>Settled Collections</Text>
           </View>
           <View style={styles.statDivider} />
           <View style={styles.statCol}>
             <Text style={[styles.statNum, { color: colors.warning }]}>
-              {billingSummary.outstandingBalance}
+              ₹ {summaryMetrics.outstandingTotal.toLocaleString('en-IN')}
             </Text>
             <Text style={styles.statLabel}>Pending Balance</Text>
           </View>
           <View style={styles.statDivider} />
           <View style={styles.statCol}>
-            <Text style={styles.statNum}>{billingSummary.pendingInvoices}</Text>
+            <Text style={styles.statNum}>{summaryMetrics.openCount}</Text>
             <Text style={styles.statLabel}>Open Invoices</Text>
           </View>
         </View>
@@ -128,12 +292,12 @@ export const BillingFoliosScreen: React.FC = () => {
           placeholder="Search by guest, room, or invoice code..."
           value={searchQuery}
           onChangeText={setSearchQuery}
-          leftIcon="receipt"
+          leftIcon="search"
           style={styles.searchInput}
         />
 
         {/* Filter Pills */}
-        <Text style={styles.filterTitle}>LEDGER STATUS FILTER:</Text>
+        <Text style={styles.sectionLabel}>LEDGER STATUS FILTER:</Text>
         <View style={styles.filterRow}>
           {statusFilters.map((st) => {
             const isActive = selectedStatus === st;
@@ -181,7 +345,7 @@ export const BillingFoliosScreen: React.FC = () => {
                     variant={isSettled ? 'success' : 'warning'}
                     size="sm"
                   />
-                  <Text style={styles.totalAmt}>{formatCurrency(folio.totalAmount)}</Text>
+                  <Text style={styles.totalAmt}>₹ {folio.totalAmount.toLocaleString('en-IN')}</Text>
                 </View>
               </TouchableOpacity>
 
@@ -190,36 +354,43 @@ export const BillingFoliosScreen: React.FC = () => {
                 <View style={styles.expandedSection}>
                   <View style={styles.sectionRowBetween}>
                     <Text style={styles.breakdownTitle}>Itemized Charges Breakdown:</Text>
-                    <TouchableOpacity
-                      onPress={() => setTargetFolioId(folio.id)}
-                      style={styles.addChargeTag}
-                    >
-                      <Icon name="plus" size={12} color={colors.accentBlue} style={{ marginRight: 2 }} />
-                      <Text style={styles.addChargeTagText}>Add Line Charge</Text>
-                    </TouchableOpacity>
+                    {!isSettled && (
+                      <TouchableOpacity
+                        onPress={() => setTargetFolioId(folio.id)}
+                        style={styles.addChargeTag}
+                      >
+                        <Icon
+                          name="plus"
+                          size={12}
+                          color={colors.accentBlue}
+                          style={{ marginRight: 2 }}
+                        />
+                        <Text style={styles.addChargeTagText}>Add Line Charge</Text>
+                      </TouchableOpacity>
+                    )}
                   </View>
 
                   {folio.items.map((item) => (
                     <View key={item.id} style={styles.itemLine}>
                       <Text style={styles.itemDesc} numberOfLines={1}>
-                        • {item.description} ({item.category.toUpperCase()})
+                        • {item.description}
                       </Text>
-                      <Text style={styles.itemAmt}>{formatCurrency(item.amount)}</Text>
+                      <Text style={styles.itemAmt}>₹ {item.amount.toLocaleString('en-IN')}</Text>
                     </View>
                   ))}
 
                   <View style={styles.calcDivider} />
                   <View style={styles.calcRow}>
                     <Text style={styles.calcLabel}>Subtotal:</Text>
-                    <Text style={styles.calcValue}>{formatCurrency(folio.subtotal)}</Text>
+                    <Text style={styles.calcValue}>₹ {folio.subtotal.toLocaleString('en-IN')}</Text>
                   </View>
                   <View style={styles.calcRow}>
-                    <Text style={styles.calcLabel}>Tax (10%):</Text>
-                    <Text style={styles.calcValue}>{formatCurrency(folio.taxAmount)}</Text>
+                    <Text style={styles.calcLabel}>GST (18% CGST + SGST):</Text>
+                    <Text style={styles.calcValue}>₹ {folio.taxAmount.toLocaleString('en-IN')}</Text>
                   </View>
                   <View style={styles.calcRow}>
-                    <Text style={styles.calcLabel}>Paid Deposit:</Text>
-                    <Text style={styles.calcValue}>{formatCurrency(folio.paidAmount)}</Text>
+                    <Text style={styles.calcLabel}>Advance Paid:</Text>
+                    <Text style={styles.calcValue}>₹ {folio.paidAmount.toLocaleString('en-IN')}</Text>
                   </View>
                   <View style={styles.calcRow}>
                     <Text style={[styles.calcLabel, { fontWeight: '700' }]}>Balance Due:</Text>
@@ -228,11 +399,12 @@ export const BillingFoliosScreen: React.FC = () => {
                         styles.calcValue,
                         {
                           color: folio.balanceDue > 0 ? colors.error : colors.success,
-                          fontWeight: '700',
+                          fontWeight: '800',
+                          fontSize: 14,
                         },
                       ]}
                     >
-                      {formatCurrency(folio.balanceDue)}
+                      ₹ {folio.balanceDue.toLocaleString('en-IN')}
                     </Text>
                   </View>
 
@@ -241,7 +413,6 @@ export const BillingFoliosScreen: React.FC = () => {
                       title="View Receipt"
                       variant="outline"
                       size="sm"
-                      icon="receipt"
                       style={{ flex: 1, marginRight: spacing.xs }}
                       onPress={() => setReceiptFolioId(folio.id)}
                     />
@@ -250,9 +421,8 @@ export const BillingFoliosScreen: React.FC = () => {
                         title="Settle Folio"
                         variant="primary"
                         size="sm"
-                        icon="check-circle"
                         style={{ flex: 1 }}
-                        onPress={() => handleSettle(folio.id)}
+                        onPress={() => setSettleFolioId(folio.id)}
                       />
                     )}
                   </View>
@@ -264,9 +434,9 @@ export const BillingFoliosScreen: React.FC = () => {
 
         {filteredFolios.length === 0 && (
           <View style={styles.emptyState}>
-            <Icon name="receipt" size={36} color={colors.textMuted} />
+            <Icon name="file-text" size={36} color={colors.textMuted} />
             <Text style={styles.emptyTitle}>No Invoices Found</Text>
-            <Text style={styles.emptyDesc}>No billing records match the current query.</Text>
+            <Text style={styles.emptyDesc}>No billing records match the current filter query.</Text>
           </View>
         )}
       </ScrollView>
@@ -282,34 +452,39 @@ export const BillingFoliosScreen: React.FC = () => {
           </View>
 
           <ScrollView contentContainerStyle={styles.modalBody}>
-            <Input
-              label="Charge Item Description"
-              placeholder="e.g. In-Suite Champagne & Caviar"
-              value={chargeDesc}
-              onChangeText={setChargeDesc}
-            />
-            <Input
-              label="Amount ($ USD)"
-              placeholder="185"
-              keyboardType="numeric"
-              value={chargeAmount}
-              onChangeText={setChargeAmount}
-            />
-
             <Text style={styles.formSectionLabel}>CHARGE CATEGORY:</Text>
             <View style={styles.categoryGrid}>
               {categories.map((cat) => (
                 <TouchableOpacity
-                  key={cat}
-                  onPress={() => setChargeCategory(cat)}
-                  style={[styles.catPill, chargeCategory === cat && styles.catPillActive]}
+                  key={cat.key}
+                  onPress={() => setChargeCategory(cat.key)}
+                  style={[styles.catPill, chargeCategory === cat.key && styles.catPillActive]}
                 >
-                  <Text style={[styles.catPillText, chargeCategory === cat && styles.catPillTextActive]}>
-                    {cat.toUpperCase()}
+                  <Text
+                    style={[
+                      styles.catPillText,
+                      chargeCategory === cat.key && styles.catPillTextActive,
+                    ]}
+                  >
+                    {cat.label}
                   </Text>
                 </TouchableOpacity>
               ))}
             </View>
+
+            <Input
+              label="Charge Item Description *"
+              placeholder="e.g. Extra Bed & Mattress, Packaged Drinking Water"
+              value={chargeDesc}
+              onChangeText={setChargeDesc}
+            />
+            <Input
+              label="Amount in INR (₹) *"
+              placeholder="e.g. 1000"
+              keyboardType="numeric"
+              value={chargeAmount}
+              onChangeText={setChargeAmount}
+            />
 
             <Button
               title="Post Charge to Guest Folio"
@@ -322,13 +497,73 @@ export const BillingFoliosScreen: React.FC = () => {
         </SafeAreaView>
       </Modal>
 
+      {/* Settle Folio Modal */}
+      <Modal visible={settleFolioId !== null} animationType="fade" transparent={true}>
+        <View style={styles.receiptOverlay}>
+          <View style={styles.settlePaper}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Settle Folio Payment</Text>
+              <TouchableOpacity onPress={() => setSettleFolioId(null)}>
+                <Icon name="x" size={18} color={colors.textSecondary} />
+              </TouchableOpacity>
+            </View>
+
+            {folioBeingSettled && (
+              <View style={{ padding: spacing.md }}>
+                <Text style={styles.settleGuestText}>
+                  Guest: <Text style={{ fontWeight: '700' }}>{folioBeingSettled.guestName}</Text> (Room {folioBeingSettled.roomNumber})
+                </Text>
+                <Text style={styles.settleBalanceText}>
+                  Balance Due: <Text style={{ color: '#059669', fontWeight: '800' }}>₹ {folioBeingSettled.balanceDue.toLocaleString('en-IN')}</Text>
+                </Text>
+
+                <Text style={styles.formSectionLabel}>SELECT PAYMENT METHOD:</Text>
+                {paymentMethods.map((pm) => (
+                  <TouchableOpacity
+                    key={pm}
+                    onPress={() => setSelectedPaymentMethod(pm)}
+                    style={[
+                      styles.pmRow,
+                      selectedPaymentMethod === pm && styles.pmRowActive,
+                    ]}
+                  >
+                    <Icon
+                      name={selectedPaymentMethod === pm ? 'check-circle' : 'circle'}
+                      size={16}
+                      color={selectedPaymentMethod === pm ? '#059669' : colors.textMuted}
+                    />
+                    <Text
+                      style={[
+                        styles.pmText,
+                        selectedPaymentMethod === pm && styles.pmTextActive,
+                      ]}
+                    >
+                      {pm}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+
+                <Button
+                  title="Confirm Payment & Settle"
+                  variant="primary"
+                  size="md"
+                  onPress={handleConfirmSettle}
+                  style={{ marginTop: spacing.md }}
+                />
+              </View>
+            )}
+          </View>
+        </View>
+      </Modal>
+
       {/* Invoice Receipt Modal */}
       <Modal visible={receiptFolio !== undefined} animationType="fade" transparent={true}>
         <View style={styles.receiptOverlay}>
           <View style={styles.receiptPaper}>
             <View style={styles.receiptHeader}>
-              <Text style={styles.hotelBrand}>{selectedHotel.name}</Text>
-              <Text style={styles.hotelBrandSub}>{selectedHotel.tagline}</Text>
+              <Text style={styles.hotelBrand}>
+                {receiptFolio ? getHotelName(receiptFolio.hotelId) : selectedHotel.name}
+              </Text>
               <Text style={styles.receiptTitle}>OFFICIAL GUEST FOLIO RECEIPT</Text>
             </View>
 
@@ -344,37 +579,62 @@ export const BillingFoliosScreen: React.FC = () => {
                 {receiptFolio.items.map((item) => (
                   <View key={item.id} style={styles.receiptItemRow}>
                     <Text style={styles.receiptItemDesc}>{item.description}</Text>
-                    <Text style={styles.receiptItemAmt}>{formatCurrency(item.amount)}</Text>
+                    <Text style={styles.receiptItemAmt}>
+                      ₹ {item.amount.toLocaleString('en-IN')}
+                    </Text>
                   </View>
                 ))}
 
                 <View style={styles.receiptDivider} />
                 <View style={styles.receiptTotalRow}>
-                  <Text style={styles.receiptTotalLabel}>Total Folio Due:</Text>
-                  <Text style={styles.receiptTotalAmt}>{formatCurrency(receiptFolio.totalAmount)}</Text>
+                  <Text style={styles.receiptTotalLabel}>Subtotal:</Text>
+                  <Text style={styles.receiptTotalAmt}>
+                    ₹ {receiptFolio.subtotal.toLocaleString('en-IN')}
+                  </Text>
                 </View>
                 <View style={styles.receiptTotalRow}>
-                  <Text style={styles.receiptTotalLabel}>Paid Amount:</Text>
+                  <Text style={styles.receiptTotalLabel}>GST (18%):</Text>
+                  <Text style={styles.receiptTotalAmt}>
+                    ₹ {receiptFolio.taxAmount.toLocaleString('en-IN')}
+                  </Text>
+                </View>
+                <View style={styles.receiptTotalRow}>
+                  <Text style={styles.receiptTotalLabel}>Total Folio Billed:</Text>
+                  <Text style={styles.receiptTotalAmt}>
+                    ₹ {receiptFolio.totalAmount.toLocaleString('en-IN')}
+                  </Text>
+                </View>
+                <View style={styles.receiptTotalRow}>
+                  <Text style={styles.receiptTotalLabel}>Paid Deposit:</Text>
                   <Text style={[styles.receiptTotalAmt, { color: colors.success }]}>
-                    {formatCurrency(receiptFolio.paidAmount)}
+                    ₹ {receiptFolio.paidAmount.toLocaleString('en-IN')}
                   </Text>
                 </View>
 
                 {receiptFolio.paymentMethod && (
                   <Text style={styles.paymentMethodNotice}>
-                    Paid Via: {receiptFolio.paymentMethod}
+                    Settled Via: {receiptFolio.paymentMethod}
                   </Text>
                 )}
               </View>
             )}
 
-            <Button
-              title="Close Receipt"
-              variant="secondary"
-              size="md"
-              onPress={() => setReceiptFolioId(null)}
-              style={{ marginTop: spacing.lg }}
-            />
+            <View style={{ flexDirection: 'row', gap: 8, marginTop: spacing.md }}>
+              <Button
+                title="Share Receipt"
+                variant="primary"
+                size="md"
+                onPress={handleShareReceipt}
+                style={{ flex: 1 }}
+              />
+              <Button
+                title="Close"
+                variant="outline"
+                size="md"
+                onPress={() => setReceiptFolioId(null)}
+                style={{ flex: 1 }}
+              />
+            </View>
           </View>
         </View>
       </Modal>
@@ -388,8 +648,59 @@ const styles = StyleSheet.create({
     backgroundColor: colors.background,
   },
   scrollContent: {
-    padding: spacing.lg,
-    paddingBottom: spacing.xxxl,
+    padding: spacing.md,
+    paddingBottom: spacing.xxl,
+  },
+  hotelFilterContainer: {
+    marginBottom: spacing.sm,
+  },
+  sectionLabel: {
+    ...typography.overline,
+    fontSize: 9,
+    color: colors.textSecondary,
+    marginBottom: 4,
+    letterSpacing: 0.8,
+  },
+  hotelPillsRow: {
+    paddingBottom: spacing.xs,
+  },
+  hotelPill: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: borderRadius.full,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+    marginRight: 6,
+  },
+  hotelPillActive: {
+    backgroundColor: colors.primaryNavy,
+    borderColor: colors.primaryNavy,
+  },
+  hotelPillText: {
+    ...typography.caption,
+    fontWeight: '600',
+    color: colors.textSecondary,
+  },
+  hotelPillTextActive: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+  },
+  managerNoticeCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#ECFDF5',
+    padding: spacing.sm,
+    borderRadius: borderRadius.md,
+    borderWidth: 1,
+    borderColor: '#A7F3D0',
+    marginBottom: spacing.sm,
+    gap: 6,
+  },
+  managerNoticeText: {
+    ...typography.caption,
+    fontSize: 11,
+    color: '#065F46',
   },
   summaryCard: {
     flexDirection: 'row',
@@ -424,16 +735,9 @@ const styles = StyleSheet.create({
   searchInput: {
     marginBottom: spacing.xs,
   },
-  filterTitle: {
-    ...typography.overline,
-    fontSize: 9,
-    color: colors.textSecondary,
-    marginTop: spacing.xs,
-    marginBottom: 4,
-  },
   filterRow: {
     flexDirection: 'row',
-    marginBottom: spacing.xs,
+    marginBottom: spacing.sm,
   },
   filterPill: {
     paddingHorizontal: 12,
@@ -458,7 +762,9 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   listHeader: {
-    marginTop: spacing.md,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
     marginBottom: spacing.xs,
   },
   listTitle: {
@@ -471,34 +777,35 @@ const styles = StyleSheet.create({
     marginVertical: spacing.xs,
     borderWidth: 1,
     borderColor: colors.border,
-    ...shadows.sm,
     overflow: 'hidden',
+    ...shadows.sm,
   },
   cardHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
     padding: spacing.md,
   },
   cardHeaderLeft: {
     flex: 1,
   },
   guestName: {
-    ...typography.bodySemiBold,
-    color: colors.textPrimary,
+    ...typography.subtitle1,
+    color: colors.primaryNavy,
+    fontWeight: '700',
   },
   invoiceCode: {
     ...typography.caption,
     color: colors.textSecondary,
-    marginTop: 1,
+    marginTop: 2,
   },
   cardHeaderRight: {
     alignItems: 'flex-end',
   },
   totalAmt: {
-    ...typography.bodySemiBold,
+    ...typography.subtitle2,
+    fontWeight: '800',
     color: colors.primaryNavy,
-    marginTop: 2,
+    marginTop: 4,
   },
   expandedSection: {
     backgroundColor: colors.surfaceSubtle,
@@ -513,7 +820,8 @@ const styles = StyleSheet.create({
     marginBottom: spacing.xs,
   },
   breakdownTitle: {
-    ...typography.captionBold,
+    ...typography.caption,
+    fontWeight: '700',
     color: colors.textPrimary,
   },
   addChargeTag: {
@@ -525,14 +833,15 @@ const styles = StyleSheet.create({
     borderRadius: borderRadius.xs,
   },
   addChargeTagText: {
-    ...typography.captionBold,
+    ...typography.caption,
     color: colors.accentBlue,
     fontSize: 10,
+    fontWeight: '700',
   },
   itemLine: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    paddingVertical: 2,
+    paddingVertical: 3,
   },
   itemDesc: {
     ...typography.caption,
@@ -540,7 +849,8 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   itemAmt: {
-    ...typography.captionBold,
+    ...typography.caption,
+    fontWeight: '700',
     color: colors.textPrimary,
     marginLeft: spacing.sm,
   },
@@ -552,14 +862,15 @@ const styles = StyleSheet.create({
   calcRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    paddingVertical: 1,
+    paddingVertical: 2,
   },
   calcLabel: {
     ...typography.caption,
     color: colors.textSecondary,
   },
   calcValue: {
-    ...typography.captionBold,
+    ...typography.caption,
+    fontWeight: '600',
     color: colors.textPrimary,
   },
   actionButtonsRow: {
@@ -578,54 +889,45 @@ const styles = StyleSheet.create({
   },
   emptyDesc: {
     ...typography.caption,
-    color: colors.textSecondary,
-    textAlign: 'center',
-    marginTop: 2,
+    color: colors.textMuted,
   },
   modalHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: spacing.lg,
+    padding: spacing.md,
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
-    backgroundColor: colors.surface,
   },
   modalTitle: {
-    ...typography.h4,
+    ...typography.h3,
     color: colors.primaryNavy,
   },
   modalCloseBtn: {
-    width: 32,
-    height: 32,
-    borderRadius: borderRadius.xs,
-    backgroundColor: colors.surfaceSubtle,
-    alignItems: 'center',
-    justifyContent: 'center',
+    padding: spacing.xs,
   },
   modalBody: {
-    padding: spacing.lg,
+    padding: spacing.md,
   },
   formSectionLabel: {
     ...typography.overline,
-    fontSize: 10,
     color: colors.textSecondary,
+    marginBottom: spacing.xs,
     marginTop: spacing.sm,
-    marginBottom: 6,
   },
   categoryGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
+    gap: 6,
+    marginBottom: spacing.md,
   },
   catPill: {
-    paddingHorizontal: 12,
+    paddingHorizontal: 10,
     paddingVertical: 6,
-    borderRadius: borderRadius.xs,
+    borderRadius: borderRadius.sm,
     backgroundColor: colors.surfaceSubtle,
     borderWidth: 1,
     borderColor: colors.border,
-    marginRight: 6,
-    marginBottom: 6,
   },
   catPillActive: {
     backgroundColor: colors.primaryNavy,
@@ -633,66 +935,99 @@ const styles = StyleSheet.create({
   },
   catPillText: {
     ...typography.caption,
-    fontSize: 11,
     color: colors.textSecondary,
   },
   catPillTextActive: {
-    color: colors.surface,
+    color: '#FFFFFF',
     fontWeight: '700',
   },
   receiptOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.5)',
     justifyContent: 'center',
-    padding: spacing.lg,
+    alignItems: 'center',
+    padding: spacing.md,
   },
   receiptPaper: {
-    backgroundColor: colors.surface,
-    borderRadius: borderRadius.md,
+    backgroundColor: '#FFFFFF',
+    borderRadius: borderRadius.lg,
     padding: spacing.lg,
+    width: '100%',
+    maxHeight: '90%',
     ...shadows.lg,
+  },
+  settlePaper: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: borderRadius.lg,
+    width: '100%',
+    ...shadows.lg,
+  },
+  settleGuestText: {
+    ...typography.body2,
+    color: colors.textPrimary,
+    marginBottom: 4,
+  },
+  settleBalanceText: {
+    ...typography.body2,
+    color: colors.textPrimary,
+    marginBottom: spacing.sm,
+  },
+  pmRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: spacing.sm,
+    borderRadius: borderRadius.sm,
+    borderWidth: 1,
+    borderColor: colors.border,
+    marginBottom: 6,
+    gap: 8,
+  },
+  pmRowActive: {
+    borderColor: '#059669',
+    backgroundColor: '#ECFDF5',
+  },
+  pmText: {
+    ...typography.body2,
+    color: colors.textSecondary,
+  },
+  pmTextActive: {
+    color: '#065F46',
+    fontWeight: '700',
   },
   receiptHeader: {
     alignItems: 'center',
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-    paddingBottom: spacing.sm,
-    marginBottom: spacing.sm,
+    marginBottom: spacing.md,
   },
   hotelBrand: {
-    ...typography.h4,
+    ...typography.h3,
     color: colors.primaryNavy,
-  },
-  hotelBrandSub: {
-    ...typography.caption,
-    fontSize: 10,
-    color: colors.textSecondary,
+    fontWeight: '800',
   },
   receiptTitle: {
-    ...typography.overline,
-    fontSize: 9,
-    color: colors.textMuted,
-    marginTop: 4,
+    ...typography.caption,
+    fontWeight: '700',
+    color: colors.textSecondary,
+    letterSpacing: 1,
+    marginTop: 2,
   },
   receiptMetaRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginBottom: 2,
+    marginBottom: 4,
   },
   receiptMetaText: {
     ...typography.caption,
-    fontSize: 11,
     color: colors.textSecondary,
   },
   receiptGuest: {
-    ...typography.bodySemiBold,
-    color: colors.textPrimary,
-    marginBottom: spacing.xs,
+    ...typography.subtitle2,
+    color: colors.primaryNavy,
+    fontWeight: '700',
   },
   receiptDivider: {
     height: 1,
-    backgroundColor: colors.border,
-    marginVertical: spacing.xs,
+    backgroundColor: '#E2E8F0',
+    marginVertical: spacing.sm,
   },
   receiptItemRow: {
     flexDirection: 'row',
@@ -704,7 +1039,8 @@ const styles = StyleSheet.create({
     color: colors.textPrimary,
   },
   receiptItemAmt: {
-    ...typography.captionBold,
+    ...typography.caption,
+    fontWeight: '700',
     color: colors.textPrimary,
   },
   receiptTotalRow: {
@@ -713,18 +1049,19 @@ const styles = StyleSheet.create({
     paddingVertical: 2,
   },
   receiptTotalLabel: {
-    ...typography.bodySemiBold,
-    color: colors.textPrimary,
+    ...typography.caption,
+    color: colors.textSecondary,
   },
   receiptTotalAmt: {
-    ...typography.bodySemiBold,
-    color: colors.primaryNavy,
+    ...typography.caption,
+    fontWeight: '700',
+    color: colors.textPrimary,
   },
   paymentMethodNotice: {
     ...typography.caption,
-    color: colors.textMuted,
-    fontSize: 10,
-    marginTop: spacing.xs,
-    fontStyle: 'italic',
+    color: colors.success,
+    fontWeight: '700',
+    textAlign: 'center',
+    marginTop: spacing.sm,
   },
 });

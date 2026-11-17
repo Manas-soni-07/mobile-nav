@@ -6,12 +6,25 @@ import { RoleSelectionScreen } from './RoleSelectionScreen';
 import { LoginScreen } from './LoginScreen';
 import { AdminDashboardScreen } from './AdminDashboardScreen';
 import { ManagerDashboardScreen } from './ManagerDashboardScreen';
+import { HotelsManagementScreen } from './HotelsManagementScreen';
+import { ManagersManagementScreen } from './ManagersManagementScreen';
+import { StaffManagementScreen } from './StaffManagementScreen';
+import { SalaryManagementScreen } from './SalaryManagementScreen';
+import { SalaryAdvancesScreen } from './SalaryAdvancesScreen';
+import { SettingsScreen } from './SettingsScreen';
 import { AttendanceScreen } from './AttendanceScreen';
 import { AdvanceBookingScreen } from './AdvanceBookingScreen';
 import { CheckInRoomsScreen } from './CheckInRoomsScreen';
 import { BillingFoliosScreen } from './BillingFoliosScreen';
 import { DailyExpensesScreen } from './DailyExpensesScreen';
 import { DailySummaryScreen } from './DailySummaryScreen';
+import { BanquetEventsScreen } from './BanquetEventsScreen';
+import { InRoomDiningScreen } from './InRoomDiningScreen';
+import { HousekeepingDispatchScreen } from './HousekeepingDispatchScreen';
+import { AyurvedicSpaScreen } from './AyurvedicSpaScreen';
+import { ConciergeDispatchScreen } from './ConciergeDispatchScreen';
+import { ShiftHandoverScreen } from './ShiftHandoverScreen';
+import { CloudSyncScreen } from './CloudSyncScreen';
 import { colors } from '../theme/colors';
 
 export const MainAppNavigator: React.FC = () => {
@@ -29,6 +42,20 @@ export const MainAppNavigator: React.FC = () => {
         return <AdminDashboardScreen />;
       case 'manager-dashboard':
         return <ManagerDashboardScreen />;
+      case 'hotels':
+        return <HotelsManagementScreen />;
+      case 'managers':
+        return <ManagersManagementScreen />;
+      case 'rooms':
+        return <CheckInRoomsScreen />;
+      case 'staff':
+        return <StaffManagementScreen />;
+      case 'salaries':
+        return <SalaryManagementScreen />;
+      case 'salary-advances':
+        return <SalaryAdvancesScreen />;
+      case 'settings':
+        return <SettingsScreen />;
       case 'attendance':
         return <AttendanceScreen />;
       case 'advance-booking':
@@ -41,6 +68,20 @@ export const MainAppNavigator: React.FC = () => {
         return <DailyExpensesScreen />;
       case 'daily-summary':
         return <DailySummaryScreen />;
+      case 'banquets-events':
+        return <BanquetEventsScreen />;
+      case 'in-room-dining':
+        return <InRoomDiningScreen />;
+      case 'housekeeping-dispatch':
+        return <HousekeepingDispatchScreen />;
+      case 'ayurvedic-spa':
+        return <AyurvedicSpaScreen />;
+      case 'concierge-dispatch':
+        return <ConciergeDispatchScreen />;
+      case 'shift-handover':
+        return <ShiftHandoverScreen />;
+      case 'cloud-sync':
+        return <CloudSyncScreen />;
       default:
         return <SplashScreen />;
     }

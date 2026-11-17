@@ -23,6 +23,16 @@ import {
   RoomStatus,
   HousekeepingStatus,
   AttendanceStatus,
+  BanquetEvent,
+  DiningOrder,
+  DiningOrderItem,
+  HousekeepingTicket,
+  GuestKYC,
+  SpaTreatment,
+  SpaBooking,
+  ExcursionPackage,
+  ConciergeBooking,
+  ShiftHandover,
 } from '../types/hotel';
 import {
   formatCurrency,
@@ -114,7 +124,7 @@ export class HotelService {
   // ------------------------------------------------------------
   // CHECK-IN / CHECK-OUT LIFECYCLE
   // ------------------------------------------------------------
-  public checkInGuest(bookingId: string, assignedRoomId: string): { booking: Booking; room: Room } | null {
+  public checkInGuest(bookingId: string, assignedRoomId: string, guestKyc?: GuestKYC): { booking: Booking; room: Room } | null {
     const booking = mockStorage.getBooking(bookingId);
     const room = mockStorage.getRoom(assignedRoomId);
 
@@ -125,6 +135,7 @@ export class HotelService {
       status: 'checked_in',
       roomId: room.id,
       roomNumber: room.roomNumber,
+      ...(guestKyc ? { guestKyc } : {}),
     });
 
     // 2. Update Room
@@ -159,10 +170,10 @@ export class HotelService {
           },
         ],
         subtotal: booking.totalAmount,
-        taxAmount: Math.round(booking.totalAmount * 0.1),
-        totalAmount: Math.round(booking.totalAmount * 1.1),
+        taxAmount: Math.round(booking.totalAmount * 0.18),
+        totalAmount: Math.round(booking.totalAmount * 1.18),
         paidAmount: booking.depositPaid,
-        balanceDue: Math.max(0, Math.round(booking.totalAmount * 1.1) - booking.depositPaid),
+        balanceDue: Math.max(0, Math.round(booking.totalAmount * 1.18) - booking.depositPaid),
         createdAt: new Date().toISOString().split('T')[0],
       });
     }
@@ -212,7 +223,10 @@ export class HotelService {
   // ------------------------------------------------------------
   // STAFF & ATTENDANCE
   // ------------------------------------------------------------
-  public getStaff(hotelId: string): StaffMember[] {
+  public getStaff(hotelId?: string): StaffMember[] {
+    if (!hotelId || hotelId === 'all') {
+      return mockStorage.getStaff();
+    }
     return mockStorage.getStaff(hotelId);
   }
 
@@ -280,7 +294,7 @@ export class HotelService {
 
     const updatedItems = [...folio.items, newItem];
     const subtotal = updatedItems.reduce((sum, it) => sum + it.amount, 0);
-    const taxAmount = Math.round(subtotal * 0.1);
+    const taxAmount = Math.round(subtotal * 0.18);
     const totalAmount = subtotal + taxAmount;
     const balanceDue = Math.max(0, totalAmount - folio.paidAmount);
 
@@ -328,7 +342,10 @@ export class HotelService {
   // ------------------------------------------------------------
   // EXPENSES
   // ------------------------------------------------------------
-  public getExpenses(hotelId: string): ExpenseRecord[] {
+  public getExpenses(hotelId?: string): ExpenseRecord[] {
+    if (!hotelId || hotelId === 'all') {
+      return mockStorage.getExpenses();
+    }
     return mockStorage.getExpenses(hotelId);
   }
 
@@ -341,8 +358,10 @@ export class HotelService {
     return mockStorage.addExpense(newExpense);
   }
 
-  public getExpensesSummary(hotelId: string): DailyExpensesSummary {
-    const expenses = mockStorage.getExpenses(hotelId);
+  public getExpensesSummary(hotelId?: string): DailyExpensesSummary {
+    const expenses = !hotelId || hotelId === 'all' 
+      ? mockStorage.getExpenses() 
+      : mockStorage.getExpenses(hotelId);
     const todayTotal = expenses.reduce((sum, e) => sum + e.amount, 0);
 
     // Group by category
@@ -432,18 +451,18 @@ export class HotelService {
       .filter((f) => f.status === 'settled')
       .reduce((sum, f) => sum + f.totalAmount, 0);
 
-    // Baseline revenue scaled for resort size to mirror realistic executive reporting
-    const grossRevenueRaw = occupiedRoomRateTotal * 15 + settledFolioTotal * 2.5;
+    // Baseline revenue scaled for resort size in INR
+    const grossRevenueRaw = occupiedRoomRateTotal * 6 + settledFolioTotal * 0.8;
 
     // ADR = Gross Room Revenue / Occupied Rooms
     const adrRaw =
-      occupiedRooms > 0 ? grossRevenueRaw / (occupiedRooms * 1.3) : 320;
+      occupiedRooms > 0 ? grossRevenueRaw / (occupiedRooms * 1.2) : 9500;
 
     // RevPAR = Gross Revenue / Total Rooms
-    const revParRaw = totalRooms > 0 ? grossRevenueRaw / totalRooms : 200;
+    const revParRaw = totalRooms > 0 ? grossRevenueRaw / totalRooms : 4500;
 
     // Expenses total
-    const rawExpenses = expenses.reduce((sum, e) => sum + e.amount, 0) * 4;
+    const rawExpenses = expenses.reduce((sum, e) => sum + e.amount, 0) * 1.8;
 
     // Net Operating Income
     const rawNetIncome = Math.max(0, grossRevenueRaw - rawExpenses);
@@ -476,7 +495,7 @@ export class HotelService {
     return [
       {
         id: 'mod-attendance',
-        title: 'Staff Attendance',
+        title: 'Staff Daily Attendance',
         subtitle: `${staff.presentStaff} of ${staff.totalStaff} staff active on duty`,
         icon: 'users',
         badge: `${staff.presentStaff}/${staff.totalStaff} Active`,
@@ -492,7 +511,7 @@ export class HotelService {
       },
       {
         id: 'mod-checkin-rooms',
-        title: 'Check-in Rooms',
+        title: 'Check-in / Check-out',
         subtitle: `${arrivals.length} guest arrivals scheduled today`,
         icon: 'key',
         badge: `${arrivals.length} Ready`,
@@ -508,22 +527,229 @@ export class HotelService {
       },
       {
         id: 'mod-daily-expenses',
-        title: 'Daily Expenses',
-        subtitle: `${expenses.todayTotal} operational expenses logged`,
+        title: 'Other Expenses',
+        subtitle: `${expenses.todayTotal} operational disbursements logged`,
         icon: 'dollar-sign',
         badge: expenses.todayTotal,
         badgeColor: 'warning',
       },
       {
+        id: 'mod-cloud-sync',
+        title: 'TiDB Cloud Sync Manager',
+        subtitle: 'MySQL distributed cloud tables audit',
+        icon: 'refresh-cw',
+        badge: 'AWS Tokyo',
+        badgeColor: 'success',
+      },
+      {
         id: 'mod-daily-summary',
-        title: 'Daily Summary',
-        subtitle: 'Executive RevPAR, ADR, and P&L breakdown',
+        title: 'Daily Summary Reports',
+        subtitle: 'Executive revenue, collections, and net profit audit',
         icon: 'trending-up',
         badge: 'Admin Only',
         badgeColor: 'primary',
         adminOnly: true,
       },
     ];
+  }
+
+  // ------------------------------------------------------------
+  // PHASE 5: BANQUETS, DINING (KOT) & HOUSEKEEPING OPERATIONS
+  // ------------------------------------------------------------
+  public getBanquets(hotelId: string): BanquetEvent[] {
+    return mockStorage.getBanquets(hotelId);
+  }
+
+  public createBanquet(eventData: Omit<BanquetEvent, 'id'>): BanquetEvent {
+    const newEvent: BanquetEvent = {
+      ...eventData,
+      id: `ev-${Date.now()}`,
+    };
+    return mockStorage.addBanquet(newEvent);
+  }
+
+  public updateBanquetStatus(eventId: string, status: BanquetEvent['status']): BanquetEvent | undefined {
+    return mockStorage.updateBanquet(eventId, { status });
+  }
+
+  public getDiningOrders(hotelId: string): DiningOrder[] {
+    return mockStorage.getDiningOrders(hotelId);
+  }
+
+  public createDiningOrder(orderData: Omit<DiningOrder, 'id' | 'orderNumber' | 'createdAt'>): DiningOrder {
+    const randomKOT = Math.floor(100 + Math.random() * 900);
+    const orderNumber = `KOT-2026-${randomKOT}`;
+    const newOrder: DiningOrder = {
+      ...orderData,
+      id: `ord-${Date.now()}`,
+      orderNumber,
+      createdAt: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+    };
+
+    const savedOrder = mockStorage.addDiningOrder(newOrder);
+
+    // Auto post to guest's billing folio if open
+    const folios = mockStorage.getFolios(orderData.hotelId);
+    const guestFolio = folios.find((f) => f.roomNumber === orderData.roomNumber && f.status === 'open');
+    if (guestFolio) {
+      this.addFolioItem(guestFolio.id, {
+        description: `In-Room Dining (${orderNumber})`,
+        category: 'dining',
+        amount: orderData.totalAmount,
+      });
+    }
+
+    return savedOrder;
+  }
+
+  public updateDiningOrderStatus(orderId: string, status: DiningOrder['status']): DiningOrder | undefined {
+    return mockStorage.updateDiningOrder(orderId, { status });
+  }
+
+  public getMenuCatalog(): DiningOrderItem[] {
+    return mockStorage.getMenuCatalog();
+  }
+
+  public getHousekeepingTickets(hotelId: string): HousekeepingTicket[] {
+    return mockStorage.getHousekeepingTickets(hotelId);
+  }
+
+  public createHousekeepingTicket(
+    ticketData: Omit<HousekeepingTicket, 'id' | 'requestedTime'>
+  ): HousekeepingTicket {
+    const newTicket: HousekeepingTicket = {
+      ...ticketData,
+      id: `tkt-${Date.now()}`,
+      requestedTime: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+    };
+    return mockStorage.addHousekeepingTicket(newTicket);
+  }
+
+  public updateHousekeepingTicketStatus(
+    ticketId: string,
+    status: HousekeepingTicket['status']
+  ): HousekeepingTicket | undefined {
+    return mockStorage.updateHousekeepingTicket(ticketId, { status });
+  }
+
+  // ------------------------------------------------------------
+  // PHASE 6: AYURVEDIC SPA & WELLNESS RETREAT
+  // ------------------------------------------------------------
+  public getSpaTreatments(): SpaTreatment[] {
+    return mockStorage.getSpaTreatments();
+  }
+
+  public getSpaBookings(hotelId: string): SpaBooking[] {
+    return mockStorage.getSpaBookings(hotelId);
+  }
+
+  public createSpaBooking(
+    bookingData: Omit<SpaBooking, 'id' | 'bookingRef' | 'gstAmount' | 'totalAmount'>
+  ): SpaBooking {
+    const randomCode = Math.floor(100 + Math.random() * 900);
+    const bookingRef = `SPA-2026-${randomCode}`;
+    const gstAmount = Math.round(bookingData.price * 0.18);
+    const totalAmount = bookingData.price + gstAmount;
+
+    const newBooking: SpaBooking = {
+      ...bookingData,
+      id: `sb-${Date.now()}`,
+      bookingRef,
+      gstAmount,
+      totalAmount,
+    };
+
+    const savedBooking = mockStorage.addSpaBooking(newBooking);
+
+    // Auto post to guest's room folio if open
+    const folios = mockStorage.getFolios(bookingData.hotelId);
+    const guestFolio = folios.find((f) => f.roomNumber === bookingData.roomNumber && f.status === 'open');
+    if (guestFolio) {
+      this.addFolioItem(guestFolio.id, {
+        description: `Ayurvedic Spa: ${bookingData.treatmentName} (${bookingRef})`,
+        category: 'spa',
+        amount: totalAmount,
+      });
+    }
+
+    return savedBooking;
+  }
+
+  public updateSpaBookingStatus(
+    bookingId: string,
+    status: SpaBooking['status']
+  ): SpaBooking | undefined {
+    return mockStorage.updateSpaBooking(bookingId, { status });
+  }
+
+  // ------------------------------------------------------------
+  // PHASE 6: ROYAL CONCIERGE & CULTURAL EXCURSIONS
+  // ------------------------------------------------------------
+  public getExcursions(): ExcursionPackage[] {
+    return mockStorage.getExcursions();
+  }
+
+  public getConciergeBookings(hotelId: string): ConciergeBooking[] {
+    return mockStorage.getConciergeBookings(hotelId);
+  }
+
+  public createConciergeBooking(
+    bookingData: Omit<ConciergeBooking, 'id' | 'bookingRef' | 'gstAmount' | 'totalAmount'>
+  ): ConciergeBooking {
+    const randomCode = Math.floor(100 + Math.random() * 900);
+    const bookingRef = `CON-2026-${randomCode}`;
+    const calculatedSubtotal = bookingData.numberOfGuests * 3200;
+    const gstAmount = Math.round(calculatedSubtotal * 0.18);
+    const totalAmount = calculatedSubtotal + gstAmount;
+
+    const newBooking: ConciergeBooking = {
+      ...bookingData,
+      id: `cb-${Date.now()}`,
+      bookingRef,
+      gstAmount,
+      totalAmount,
+    };
+
+    const savedBooking = mockStorage.addConciergeBooking(newBooking);
+
+    // Auto post to guest folio
+    const folios = mockStorage.getFolios(bookingData.hotelId);
+    const guestFolio = folios.find((f) => f.roomNumber === bookingData.roomNumber && f.status === 'open');
+    if (guestFolio) {
+      this.addFolioItem(guestFolio.id, {
+        description: `Concierge: ${bookingData.serviceTitle} (${bookingRef})`,
+        category: 'transport',
+        amount: totalAmount,
+      });
+    }
+
+    return savedBooking;
+  }
+
+  public updateConciergeBookingStatus(
+    bookingId: string,
+    status: ConciergeBooking['status']
+  ): ConciergeBooking | undefined {
+    return mockStorage.updateConciergeBooking(bookingId, { status });
+  }
+
+  // ------------------------------------------------------------
+  // PHASE 6: SHIFT HANDOVER & NIGHT AUDIT LOGS
+  // ------------------------------------------------------------
+  public getShiftHandovers(hotelId: string): ShiftHandover[] {
+    return mockStorage.getShiftHandovers(hotelId);
+  }
+
+  public createShiftHandover(
+    handoverData: Omit<ShiftHandover, 'id' | 'timestamp'>
+  ): ShiftHandover {
+    const timeFormatted = `${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} (${new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })})`;
+    const newHandover: ShiftHandover = {
+      ...handoverData,
+      id: `sh-${Date.now()}`,
+      timestamp: timeFormatted,
+    };
+    return mockStorage.addShiftHandover(newHandover);
   }
 
   // Reset store to mock defaults

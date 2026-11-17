@@ -1,3 +1,9 @@
+/**
+ * ResortOS - Check-In, Check-Out & Room Operations
+ * Fast walk-in check-in, detailed check-out billing (Rent + manual food/water - discount + tax - advance),
+ * and complete room lifecycle management (Available -> Reserved -> Occupied -> Cleaning -> Available).
+ */
+
 import React, { useState, useMemo } from 'react';
 import {
   View,
@@ -6,6 +12,7 @@ import {
   ScrollView,
   TouchableOpacity,
   SafeAreaView,
+  Modal,
   Alert,
 } from 'react-native';
 import { colors } from '../theme/colors';
@@ -14,12 +21,19 @@ import { spacing, borderRadius, shadows } from '../theme/spacing';
 import { useNavigation } from '../hooks/useNavigation';
 import { useHotel } from '../hooks/useHotel';
 import { Header } from '../components/common/Header';
+import { Card } from '../components/common/Card';
 import { Input } from '../components/common/Input';
 import { Badge } from '../components/common/Badge';
 import { Icon } from '../components/common/Icon';
 import { Button } from '../components/common/Button';
 import { formatCurrency } from '../utils/formatters';
-import { RoomStatus, HousekeepingStatus } from '../types/hotel';
+import { RoomStatus, Room, Booking } from '../types/hotel';
+
+interface ExtraChargeItem {
+  id: string;
+  name: string;
+  amount: number;
+}
 
 export const CheckInRoomsScreen: React.FC = () => {
   const { goBack } = useNavigation();
@@ -31,12 +45,41 @@ export const CheckInRoomsScreen: React.FC = () => {
     checkOutGuest,
     updateRoomStatus,
     selectedHotel,
+    createBooking,
   } = useHotel();
 
   const [activeTab, setActiveTab] = useState<'arrivals' | 'inventory'>('arrivals');
   const [searchQuery, setSearchQuery] = useState('');
   const [roomStatusFilter, setRoomStatusFilter] = useState<string>('ALL');
 
+  // --- Walk-in Check-in Modal ---
+  const [showWalkInModal, setShowWalkInModal] = useState(false);
+  const [walkInRoomId, setWalkInRoomId] = useState('');
+  const [walkInGuestName, setWalkInGuestName] = useState('');
+  const [walkInPhone, setWalkInPhone] = useState('+91 ');
+  const [walkInAddress, setWalkInAddress] = useState('');
+  const [walkInIdType, setWalkInIdType] = useState('Aadhaar Card');
+  const [walkInIdNumber, setWalkInIdNumber] = useState('');
+  const [walkInGuestsCount, setWalkInGuestsCount] = useState('2');
+  const [walkInRent, setWalkInRent] = useState('2500');
+  const [walkInAdvance, setWalkInAdvance] = useState('2500');
+  const [walkInCheckInDate, setWalkInCheckInDate] = useState('2026-11-16');
+  const [walkInCheckOutDate, setWalkInCheckOutDate] = useState('2026-11-17');
+
+  // --- Check-out Folio Settlement Modal ---
+  const [showCheckOutModal, setShowCheckOutModal] = useState(false);
+  const [activeCheckOutBooking, setActiveCheckOutBooking] = useState<Booking | null>(null);
+  const [activeCheckOutRoom, setActiveCheckOutRoom] = useState<Room | null>(null);
+  const [extraItems, setExtraItems] = useState<ExtraChargeItem[]>([
+    { id: '1', name: 'Mineral Water (2 Bottles)', amount: 60 },
+    { id: '2', name: 'Evening Chai & Snacks', amount: 220 },
+  ]);
+  const [newExtraName, setNewExtraName] = useState('');
+  const [newExtraAmount, setNewExtraAmount] = useState('');
+  const [discountAmount, setDiscountAmount] = useState('0');
+  const [paymentMode, setPaymentMode] = useState<'Cash' | 'UPI' | 'Card'>('UPI');
+
+  // Status Filter Options
   const statusFilters = ['ALL', 'available', 'occupied', 'cleaning', 'maintenance'];
 
   // Filtered rooms
@@ -64,118 +107,199 @@ export const CheckInRoomsScreen: React.FC = () => {
     });
   }, [todayArrivals, searchQuery]);
 
-  const handleCheckIn = (bookingId: string) => {
-    const arrival = todayArrivals.find((a) => a.id === bookingId);
-    if (!arrival) return;
-
-    let targetRoomId = arrival.roomId;
-    if (!targetRoomId && availableRooms.length > 0) {
-      targetRoomId = availableRooms[0].id;
+  // --- Walk-in Handler ---
+  const handleWalkInCheckIn = () => {
+    if (!walkInRoomId) {
+      Alert.alert('Select Room', 'Please select a vacant room for check-in');
+      return;
     }
-
-    if (!targetRoomId) {
-      Alert.alert('No Available Rooms', 'There are no vacant clean rooms ready for assignment.');
+    if (!walkInGuestName.trim()) {
+      Alert.alert('Required Field', 'Please enter guest full name');
       return;
     }
 
-    const success = checkInGuest(bookingId, targetRoomId);
-    if (success) {
-      Alert.alert('Check-In Complete', `Guest ${arrival.guestName} successfully checked in!`);
-    }
+    const selectedRoom = rooms.find((r) => r.id === walkInRoomId);
+    const rent = parseFloat(walkInRent) || 2500;
+    const advance = parseFloat(walkInAdvance) || 0;
+
+    // Create a confirmed booking and immediately check-in
+    const newBooking = createBooking({
+      hotelId: selectedHotel.id,
+      guestName: walkInGuestName,
+      guestPhone: walkInPhone,
+      guestEmail: `${walkInGuestName.toLowerCase().replace(/\s+/g, '')}@gmail.com`,
+      roomCategory: selectedRoom?.category || 'Deluxe Room',
+      roomId: walkInRoomId,
+      roomNumber: selectedRoom?.roomNumber || '101',
+      checkInDate: walkInCheckInDate,
+      checkOutDate: walkInCheckOutDate,
+      nightsCount: 1,
+      numberOfGuests: parseInt(walkInGuestsCount, 10) || 2,
+      status: 'checked_in',
+      totalAmount: rent,
+      depositPaid: advance,
+      paymentStatus: advance >= rent ? 'paid' : advance > 0 ? 'partial' : 'unpaid',
+      specialRequests: `Walk-in Guest. ID: ${walkInIdType} - ${walkInIdNumber}`,
+    });
+
+    // Mark room as occupied
+    updateRoomStatus(walkInRoomId, 'occupied', 'clean');
+
+    setShowWalkInModal(false);
+    Alert.alert(
+      'Walk-In Successful',
+      `Guest ${walkInGuestName} checked in to Room ${selectedRoom?.roomNumber}!`
+    );
   };
 
-  const handleCheckOut = (bookingId: string) => {
-    checkOutGuest(bookingId);
+  // --- Check-out Modal Opener ---
+  const openCheckOutModal = (booking: Booking) => {
+    setActiveCheckOutBooking(booking);
+    const assignedRoom = rooms.find((r) => r.id === booking.roomId || r.roomNumber === booking.roomNumber);
+    setActiveCheckOutRoom(assignedRoom || null);
+    setExtraItems([
+      { id: '1', name: 'Mineral Water (2 Bottles)', amount: 60 },
+      { id: '2', name: 'Evening Tea / Snacks', amount: 220 },
+    ]);
+    setDiscountAmount('0');
+    setPaymentMode('UPI');
+    setShowCheckOutModal(true);
   };
 
-  const handleCycleHousekeeping = (roomId: string, currentStatus: RoomStatus) => {
-    if (currentStatus === 'occupied') {
-      Alert.alert('Room Occupied', 'Cannot alter cleaning status while guest is in-house.');
-      return;
+  // Check-out calculation (Rent + Extras - Discount + 18% GST - Advance)
+  const folioCalc = useMemo(() => {
+    if (!activeCheckOutBooking) return { rent: 0, extras: 0, subtotal: 0, discount: 0, tax: 0, advance: 0, balance: 0 };
+
+    const rent = activeCheckOutBooking.totalAmount || 2500;
+    const extras = extraItems.reduce((sum, item) => sum + item.amount, 0);
+    const disc = parseFloat(discountAmount) || 0;
+    const taxable = Math.max(0, rent + extras - disc);
+    const tax = Math.round(taxable * 0.18);
+    const advance = activeCheckOutBooking.depositPaid || 0;
+    const balance = Math.max(0, taxable + tax - advance);
+
+    return { rent, extras, subtotal: rent + extras, discount: disc, tax, advance, balance };
+  }, [activeCheckOutBooking, extraItems, discountAmount]);
+
+  const handleAddExtraItem = () => {
+    if (!newExtraName.trim() || !newExtraAmount.trim()) return;
+    const amt = parseFloat(newExtraAmount) || 0;
+    setExtraItems((prev) => [...prev, { id: `${Date.now()}`, name: newExtraName, amount: amt }]);
+    setNewExtraName('');
+    setNewExtraAmount('');
+  };
+
+  const handleConfirmCheckOut = () => {
+    if (!activeCheckOutBooking) return;
+
+    // Check out guest in context
+    checkOutGuest(activeCheckOutBooking.id);
+
+    // CRITICAL: Room status becomes CLEANING on checkout!
+    if (activeCheckOutRoom) {
+      updateRoomStatus(activeCheckOutRoom.id, 'cleaning', 'dirty');
     }
 
-    if (currentStatus === 'cleaning') {
-      updateRoomStatus(roomId, 'available', 'clean');
-    } else if (currentStatus === 'available') {
-      updateRoomStatus(roomId, 'maintenance', 'dirty');
-    } else if (currentStatus === 'maintenance') {
-      updateRoomStatus(roomId, 'cleaning', 'in_progress');
-    }
+    setShowCheckOutModal(false);
+    Alert.alert(
+      'Checkout Settled & Room Marked for Cleaning',
+      `Payment of ${formatCurrency(folioCalc.balance)} recorded via ${paymentMode}.\n\nRoom ${
+        activeCheckOutRoom?.roomNumber || 'Assigned Room'
+      } is now set to CLEANING status. Manager can mark Available once sanitized.`
+    );
+  };
+
+  // One-tap Cleaning -> Available transition
+  const handleMarkCleanAndAvailable = (roomId: string, roomNum: string) => {
+    updateRoomStatus(roomId, 'available', 'clean');
+    Alert.alert('Room Cleaned', `Room ${roomNum} is now inspected and Available for check-in.`);
   };
 
   return (
     <SafeAreaView style={styles.safeArea}>
       <Header
-        title="Check-In & Rooms"
+        title="Check-In / Check-Out"
         subtitle={selectedHotel.name}
-        hotelBadge={`${availableRooms.length} VACANT READY`}
+        hotelBadge={`${availableRooms.length} VACANT CLEAN`}
         showBack
         onBack={goBack}
+        rightAction={
+          <Button
+            title="+ Walk-in"
+            size="sm"
+            variant="primary"
+            onPress={() => {
+              setWalkInRoomId(availableRooms[0]?.id || '');
+              setWalkInGuestName('');
+              setWalkInPhone('+91 ');
+              setWalkInRent(availableRooms[0]?.ratePerNight?.toString() || '2500');
+              setWalkInAdvance('2500');
+              setShowWalkInModal(true);
+            }}
+          />
+        }
       />
 
-      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-        {/* Tab Selector */}
-        <View style={styles.tabContainer}>
-          <TouchableOpacity
-            activeOpacity={0.8}
-            onPress={() => setActiveTab('arrivals')}
-            style={[styles.tabBtn, activeTab === 'arrivals' && styles.tabBtnActive]}
-          >
-            <Text style={[styles.tabText, activeTab === 'arrivals' && styles.tabTextActive]}>
-              Today's Arrivals ({todayArrivals.length})
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            activeOpacity={0.8}
-            onPress={() => setActiveTab('inventory')}
-            style={[styles.tabBtn, activeTab === 'inventory' && styles.tabBtnActive]}
-          >
-            <Text style={[styles.tabText, activeTab === 'inventory' && styles.tabTextActive]}>
-              Room Inventory ({rooms.length})
-            </Text>
-          </TouchableOpacity>
-        </View>
+      {/* Tabs */}
+      <View style={styles.tabContainer}>
+        <TouchableOpacity
+          style={[styles.tabBtn, activeTab === 'arrivals' && styles.tabBtnActive]}
+          onPress={() => setActiveTab('arrivals')}
+        >
+          <Text style={[styles.tabText, activeTab === 'arrivals' && styles.tabTextActive]}>
+            Active In-House Stays ({todayArrivals.length})
+          </Text>
+        </TouchableOpacity>
 
-        {/* Search Bar */}
+        <TouchableOpacity
+          style={[styles.tabBtn, activeTab === 'inventory' && styles.tabBtnActive]}
+          onPress={() => setActiveTab('inventory')}
+        >
+          <Text style={[styles.tabText, activeTab === 'inventory' && styles.tabTextActive]}>
+            Room Directory ({rooms.length})
+          </Text>
+        </TouchableOpacity>
+      </View>
+
+      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+        {/* Search Input */}
         <Input
           placeholder={
             activeTab === 'arrivals'
-              ? 'Search guest name, code, or room...'
-              : 'Search room number, category, or guest...'
+              ? 'Search guest name, room or booking ref...'
+              : 'Search room number or status...'
           }
           value={searchQuery}
           onChangeText={setSearchQuery}
           leftIcon="key"
-          style={styles.searchInput}
+          containerStyle={styles.searchBar}
         />
 
-        {/* ARRIVALS VIEW */}
+        {/* ARRIVALS & ACTIVE STAYS VIEW */}
         {activeTab === 'arrivals' && (
           <View>
             <View style={styles.sectionHeaderRow}>
-              <Text style={styles.sectionTitle}>
-                SCHEDULED ARRIVALS & ACTIVE STAYS
-              </Text>
-              <Text style={styles.sectionCounter}>{filteredArrivals.length} Guests</Text>
+              <Text style={styles.sectionTitle}>GUESTS IN-HOUSE & ARRIVALS</Text>
+              <Text style={styles.sectionCounter}>{filteredArrivals.length} Stays</Text>
             </View>
 
             {filteredArrivals.map((arrival) => {
               const isCheckedIn = arrival.status === 'checked_in';
 
               return (
-                <View key={arrival.id} style={styles.card}>
-                  <View style={styles.cardTop}>
-                    <View style={styles.cardLeft}>
+                <Card key={arrival.id} padding="lg" variant="elevated" style={styles.stayCard}>
+                  <View style={styles.stayTop}>
+                    <View style={styles.stayIdentity}>
                       <Text style={styles.guestName}>{arrival.guestName}</Text>
-                      <Text style={styles.refCode}>
+                      <Text style={styles.stayMeta}>
                         {arrival.bookingReference} • {arrival.roomCategory}
                       </Text>
-                      <Text style={styles.dates}>
+                      <Text style={styles.stayDates}>
                         Stay: {arrival.nightsCount} Nights ({arrival.checkInDate} to {arrival.checkOutDate})
                       </Text>
                       {arrival.roomNumber && (
-                        <Text style={styles.assignedRoom}>
-                          Assigned Room: Room {arrival.roomNumber}
+                        <Text style={styles.roomBadgeText}>
+                          Allocated Room: <Text style={{ fontWeight: '800' }}>Room {arrival.roomNumber}</Text>
                         </Text>
                       )}
                     </View>
@@ -187,144 +311,343 @@ export const CheckInRoomsScreen: React.FC = () => {
                     />
                   </View>
 
-                  {arrival.specialRequests && (
-                    <View style={styles.notesBox}>
-                      <Icon name="info" size={12} color={colors.accentBlue} style={{ marginRight: 4 }} />
-                      <Text style={styles.notesText} numberOfLines={2}>
-                        {arrival.specialRequests}
+                  <View style={styles.stayBottom}>
+                    <View>
+                      <Text style={styles.folioAmount}>Rent: {formatCurrency(arrival.totalAmount)}</Text>
+                      <Text style={styles.advancePaidText}>
+                        Advance: {formatCurrency(arrival.depositPaid)}
                       </Text>
                     </View>
-                  )}
 
-                  <View style={styles.cardBottom}>
-                    <Text style={styles.amount}>
-                      Folio: {formatCurrency(arrival.totalAmount)} ({arrival.paymentStatus.toUpperCase()})
-                    </Text>
-
-                    {!isCheckedIn ? (
+                    {isCheckedIn ? (
                       <Button
-                        title="Process Check-In"
-                        variant="primary"
+                        title="Check-Out & Settle Folio"
                         size="sm"
-                        icon="key"
-                        onPress={() => handleCheckIn(arrival.id)}
+                        variant="outline"
+                        onPress={() => openCheckOutModal(arrival)}
                       />
                     ) : (
                       <Button
-                        title="Checkout & Release"
-                        variant="outline"
+                        title="Check-In Guest"
                         size="sm"
-                        icon="log-out"
-                        onPress={() => handleCheckOut(arrival.id)}
+                        variant="primary"
+                        onPress={() => checkInGuest(arrival.id, availableRooms[0]?.id || '')}
                       />
                     )}
                   </View>
-                </View>
+                </Card>
               );
             })}
-
-            {filteredArrivals.length === 0 && (
-              <View style={styles.emptyState}>
-                <Icon name="check-circle" size={36} color={colors.success} />
-                <Text style={styles.emptyTitle}>No Pending Arrivals</Text>
-                <Text style={styles.emptyDesc}>All scheduled guests are checked in.</Text>
-              </View>
-            )}
           </View>
         )}
 
-        {/* ROOM INVENTORY VIEW */}
+        {/* ROOM DIRECTORY & CLEANING LIFECYCLE VIEW */}
         {activeTab === 'inventory' && (
           <View>
-            {/* Filter Pills */}
-            <Text style={styles.filterTitle}>ROOM STATUS FILTER:</Text>
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.filterScroll}
-            >
-              {statusFilters.map((st) => {
-                const isActive = roomStatusFilter === st;
-                return (
-                  <TouchableOpacity
-                    key={st}
-                    onPress={() => setRoomStatusFilter(st)}
-                    style={[styles.filterPill, isActive && styles.filterPillActive]}
-                  >
-                    <Text style={[styles.filterPillText, isActive && styles.filterPillTextActive]}>
-                      {st.toUpperCase()}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
+            {/* Status Filter Pills */}
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filterPillsScroll}>
+              {statusFilters.map((st) => (
+                <TouchableOpacity
+                  key={st}
+                  style={[styles.statusPill, roomStatusFilter === st && styles.statusPillActive]}
+                  onPress={() => setRoomStatusFilter(st)}
+                >
+                  <Text style={[styles.statusPillText, roomStatusFilter === st && styles.statusPillTextActive]}>
+                    {st.toUpperCase()}
+                  </Text>
+                </TouchableOpacity>
+              ))}
             </ScrollView>
 
             <View style={styles.sectionHeaderRow}>
-              <Text style={styles.sectionTitle}>
-                ROOMS DIRECTORY ({filteredRooms.length} ROOMS)
-              </Text>
-              <Text style={styles.cycleHint}>Tap to cycle maintenance</Text>
+              <Text style={styles.sectionTitle}>ROOMS INVENTORY ({filteredRooms.length})</Text>
+              <Text style={styles.cleanHint}>Checkout ➔ Cleaning ➔ Available</Text>
             </View>
 
-            {/* Room Cards Grid */}
             {filteredRooms.map((room) => {
-              const isOccupied = room.status === 'occupied';
               const isAvailable = room.status === 'available';
+              const isOccupied = room.status === 'occupied';
               const isCleaning = room.status === 'cleaning';
+              const isMaint = room.status === 'maintenance';
 
-              const badgeVariant = isOccupied
-                ? 'primary'
-                : isAvailable
+              const badgeVariant = isAvailable
                 ? 'success'
+                : isOccupied
+                ? 'primary'
                 : isCleaning
                 ? 'warning'
                 : 'error';
 
               return (
-                <TouchableOpacity
-                  key={room.id}
-                  activeOpacity={0.7}
-                  onPress={() => handleCycleHousekeeping(room.id, room.status)}
-                  style={styles.card}
-                >
-                  <View style={styles.cardTop}>
-                    <View style={styles.roomBadgeCircle}>
-                      <Text style={styles.roomNumText}>{room.roomNumber}</Text>
+                <Card key={room.id} padding="lg" variant="elevated" style={styles.roomCard}>
+                  <View style={styles.roomTop}>
+                    <View style={styles.roomBadge}>
+                      <Text style={styles.roomNum}>{room.roomNumber}</Text>
                     </View>
-
-                    <View style={styles.roomInfo}>
-                      <View style={styles.roomNameRow}>
-                        <Text style={styles.roomCategory}>{room.category}</Text>
-                        <Badge
-                          label={room.status.toUpperCase()}
-                          variant={badgeVariant}
-                          size="sm"
-                        />
+                    <View style={styles.roomDetails}>
+                      <View style={styles.roomTitleRow}>
+                        <Text style={styles.roomCat}>{room.category}</Text>
+                        <Badge label={room.status.toUpperCase()} variant={badgeVariant} size="sm" />
                       </View>
-                      <Text style={styles.roomMeta}>
-                        Floor {room.floor} • ${room.ratePerNight}/night • Clean: {room.housekeepingStatus.toUpperCase()}
+                      <Text style={styles.roomPrice}>
+                        {formatCurrency(room.ratePerNight)} / night • Floor {room.floor}
                       </Text>
                       {room.currentGuestName && (
-                        <Text style={styles.guestInRoom}>
-                          Guest: {room.currentGuestName}
-                        </Text>
+                        <Text style={styles.inHouseGuest}>Current Guest: {room.currentGuestName}</Text>
                       )}
                     </View>
                   </View>
 
-                  <View style={styles.amenitiesRow}>
-                    {room.amenities.slice(0, 3).map((amenity, idx) => (
-                      <View key={idx} style={styles.amenityTag}>
-                        <Text style={styles.amenityText}>{amenity}</Text>
-                      </View>
-                    ))}
+                  {/* Cleaning to Available One-Tap Action */}
+                  <View style={styles.roomActionsRow}>
+                    {isCleaning && (
+                      <TouchableOpacity
+                        style={styles.markCleanBtn}
+                        onPress={() => handleMarkCleanAndAvailable(room.id, room.roomNumber)}
+                      >
+                        <Icon name="check-circle" size={14} color="#047857" />
+                        <Text style={styles.markCleanText}>Sanitized: Mark Available</Text>
+                      </TouchableOpacity>
+                    )}
+
+                    {isAvailable && (
+                      <TouchableOpacity
+                        style={styles.markMaintBtn}
+                        onPress={() => updateRoomStatus(room.id, 'maintenance', 'dirty')}
+                      >
+                        <Icon name="alert-triangle" size={14} color="#DC2626" />
+                        <Text style={styles.markMaintText}>Mark Maintenance</Text>
+                      </TouchableOpacity>
+                    )}
+
+                    {isMaint && (
+                      <TouchableOpacity
+                        style={styles.markCleanBtn}
+                        onPress={() => updateRoomStatus(room.id, 'cleaning', 'dirty')}
+                      >
+                        <Icon name="rotate-ccw" size={14} color="#047857" />
+                        <Text style={styles.markCleanText}>Repair Done: Send to Cleaning</Text>
+                      </TouchableOpacity>
+                    )}
                   </View>
-                </TouchableOpacity>
+                </Card>
               );
             })}
           </View>
         )}
       </ScrollView>
+
+      {/* WALK-IN CHECK-IN MODAL */}
+      <Modal visible={showWalkInModal} animationType="slide" transparent>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalCard}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Fast Walk-In Check-In</Text>
+              <TouchableOpacity onPress={() => setShowWalkInModal(false)}>
+                <Icon name="x" size={22} color={colors.textSecondary} />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView showsVerticalScrollIndicator={false}>
+              {/* Room Selector */}
+              <Text style={styles.formSectionLabel}>Select Vacant Clean Room *</Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.roomPickScroll}>
+                {availableRooms.map((r) => {
+                  const isPicked = walkInRoomId === r.id;
+                  return (
+                    <TouchableOpacity
+                      key={r.id}
+                      style={[styles.roomPickChip, isPicked && styles.roomPickChipActive]}
+                      onPress={() => {
+                        setWalkInRoomId(r.id);
+                        setWalkInRent(r.ratePerNight.toString());
+                      }}
+                    >
+                      <Text style={[styles.roomPickNum, isPicked && styles.roomPickNumActive]}>
+                        Room {r.roomNumber}
+                      </Text>
+                      <Text style={styles.roomPickCat}>{r.category}</Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </ScrollView>
+
+              <Input
+                label="Guest Full Name *"
+                placeholder="e.g. Suresh Singhal"
+                value={walkInGuestName}
+                onChangeText={setWalkInGuestName}
+              />
+              <Input
+                label="Mobile Contact Phone *"
+                placeholder="+91 98290 12345"
+                value={walkInPhone}
+                onChangeText={setWalkInPhone}
+                keyboardType="phone-pad"
+              />
+              <Input
+                label="Guest Permanent Address"
+                placeholder="City, State"
+                value={walkInAddress}
+                onChangeText={setWalkInAddress}
+              />
+              <View style={styles.halfRow}>
+                <Input
+                  label="ID Type"
+                  value={walkInIdType}
+                  onChangeText={setWalkInIdType}
+                  containerStyle={styles.halfInput}
+                />
+                <Input
+                  label="ID Number"
+                  placeholder="e.g. 4821 9920 1120"
+                  value={walkInIdNumber}
+                  onChangeText={setWalkInIdNumber}
+                  containerStyle={styles.halfInput}
+                />
+              </View>
+              <View style={styles.halfRow}>
+                <Input
+                  label="Room Rent / Night (₹)"
+                  value={walkInRent}
+                  onChangeText={setWalkInRent}
+                  keyboardType="numeric"
+                  containerStyle={styles.halfInput}
+                />
+                <Input
+                  label="Advance Collected (₹)"
+                  value={walkInAdvance}
+                  onChangeText={setWalkInAdvance}
+                  keyboardType="numeric"
+                  containerStyle={styles.halfInput}
+                />
+              </View>
+
+              <Button
+                title="Check-In Guest & Assign Key"
+                onPress={handleWalkInCheckIn}
+                variant="primary"
+                size="lg"
+                style={styles.modalSaveBtn}
+              />
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
+      {/* CHECK-OUT FOLIO SETTLEMENT MODAL (SECTION 13 MANDATE) */}
+      <Modal visible={showCheckOutModal} animationType="slide" transparent>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalCard}>
+            <View style={styles.modalHeader}>
+              <View>
+                <Text style={styles.modalTitle}>Check-Out & Final Bill</Text>
+                <Text style={styles.modalSub}>
+                  Room {activeCheckOutRoom?.roomNumber} • {activeCheckOutBooking?.guestName}
+                </Text>
+              </View>
+              <TouchableOpacity onPress={() => setShowCheckOutModal(false)}>
+                <Icon name="x" size={22} color={colors.textSecondary} />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView showsVerticalScrollIndicator={false}>
+              {/* Extra Items List */}
+              <Text style={styles.formSectionLabel}>Extra Line Charges (Food, Water, Laundry)</Text>
+              {extraItems.map((item) => (
+                <View key={item.id} style={styles.extraItemRow}>
+                  <Text style={styles.extraItemName}>• {item.name}</Text>
+                  <Text style={styles.extraItemAmt}>{formatCurrency(item.amount)}</Text>
+                </View>
+              ))}
+
+              {/* Add Extra Charge Input */}
+              <View style={styles.addExtraRow}>
+                <Input
+                  placeholder="Add item (e.g. Extra Water, Lunch)"
+                  value={newExtraName}
+                  onChangeText={setNewExtraName}
+                  containerStyle={{ flex: 2, marginRight: spacing.xs }}
+                />
+                <Input
+                  placeholder="Amount ₹"
+                  value={newExtraAmount}
+                  onChangeText={setNewExtraAmount}
+                  keyboardType="numeric"
+                  containerStyle={{ flex: 1, marginRight: spacing.xs }}
+                />
+                <Button title="Add" size="sm" variant="outline" onPress={handleAddExtraItem} />
+              </View>
+
+              <Input
+                label="Discount Amount (₹)"
+                placeholder="0"
+                value={discountAmount}
+                onChangeText={setDiscountAmount}
+                keyboardType="numeric"
+              />
+
+              {/* BILL CALCULATION SUMMARY */}
+              <View style={styles.billBox}>
+                <View style={styles.billRow}>
+                  <Text style={styles.billLabel}>Base Room Rent Total:</Text>
+                  <Text style={styles.billVal}>{formatCurrency(folioCalc.rent)}</Text>
+                </View>
+                <View style={styles.billRow}>
+                  <Text style={styles.billLabel}>Extra Food & Water Charges:</Text>
+                  <Text style={styles.billVal}>+ {formatCurrency(folioCalc.extras)}</Text>
+                </View>
+                {folioCalc.discount > 0 && (
+                  <View style={styles.billRow}>
+                    <Text style={[styles.billLabel, { color: colors.error }]}>Discount Applied:</Text>
+                    <Text style={[styles.billVal, { color: colors.error }]}>
+                      − {formatCurrency(folioCalc.discount)}
+                    </Text>
+                  </View>
+                )}
+                <View style={styles.billRow}>
+                  <Text style={styles.billLabel}>GST Tax (18%):</Text>
+                  <Text style={styles.billVal}>+ {formatCurrency(folioCalc.tax)}</Text>
+                </View>
+                <View style={styles.billRow}>
+                  <Text style={[styles.billLabel, { color: '#047857' }]}>Advance Paid at Check-in:</Text>
+                  <Text style={[styles.billVal, { color: '#047857' }]}>
+                    − {formatCurrency(folioCalc.advance)}
+                  </Text>
+                </View>
+                <View style={[styles.billRow, styles.finalBalanceRow]}>
+                  <Text style={styles.finalBalanceLabel}>Remaining Balance Due:</Text>
+                  <Text style={styles.finalBalanceVal}>{formatCurrency(folioCalc.balance)}</Text>
+                </View>
+              </View>
+
+              {/* Payment Mode Selector */}
+              <Text style={styles.formSectionLabel}>Settlement Payment Mode *</Text>
+              <View style={styles.payModeRow}>
+                {(['UPI', 'Cash', 'Card'] as const).map((m) => (
+                  <TouchableOpacity
+                    key={m}
+                    style={[styles.payModeBtn, paymentMode === m && styles.payModeBtnActive]}
+                    onPress={() => setPaymentMode(m)}
+                  >
+                    <Text style={[styles.payModeText, paymentMode === m && styles.payModeTextActive]}>
+                      {m}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              <Button
+                title={`Settle ${formatCurrency(folioCalc.balance)} & Complete Checkout`}
+                onPress={handleConfirmCheckOut}
+                variant="primary"
+                size="lg"
+                style={styles.modalSaveBtn}
+              />
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 };
@@ -332,225 +655,381 @@ export const CheckInRoomsScreen: React.FC = () => {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: colors.background,
+    backgroundColor: '#F8FAFC',
   },
   scrollContent: {
-    padding: spacing.lg,
-    paddingBottom: spacing.xxxl,
+    padding: spacing.md,
+    paddingBottom: spacing.xxl,
   },
   tabContainer: {
     flexDirection: 'row',
-    backgroundColor: colors.surfaceSubtle,
-    borderRadius: borderRadius.md,
-    padding: 3,
-    marginBottom: spacing.md,
+    backgroundColor: '#FFFFFF',
+    borderBottomWidth: 1,
+    borderBottomColor: '#E2E8F0',
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs,
   },
   tabBtn: {
     flex: 1,
-    paddingVertical: spacing.sm,
     alignItems: 'center',
-    borderRadius: borderRadius.sm,
+    paddingVertical: spacing.sm,
+    borderRadius: borderRadius.md,
   },
   tabBtnActive: {
-    backgroundColor: colors.surface,
-    ...shadows.sm,
+    backgroundColor: '#F1F5F9',
   },
   tabText: {
-    ...typography.captionBold,
+    ...typography.subtitle2,
     color: colors.textSecondary,
+    fontWeight: '600',
   },
   tabTextActive: {
     color: colors.primaryNavy,
+    fontWeight: '800',
   },
-  searchInput: {
+  searchBar: {
     marginBottom: spacing.xs,
   },
   sectionHeaderRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginTop: spacing.md,
+    marginTop: spacing.sm,
     marginBottom: spacing.xs,
+    paddingHorizontal: 2,
   },
   sectionTitle: {
-    ...typography.overline,
+    ...typography.caption,
     color: colors.textSecondary,
+    fontWeight: '700',
+    letterSpacing: 0.5,
   },
   sectionCounter: {
     ...typography.caption,
-    color: colors.textSecondary,
+    color: colors.textMuted,
   },
-  cycleHint: {
+  cleanHint: {
     ...typography.caption,
-    fontSize: 10,
-    color: colors.accentBlue,
-  },
-  filterTitle: {
-    ...typography.overline,
-    fontSize: 9,
-    color: colors.textSecondary,
-    marginTop: spacing.xs,
-    marginBottom: 4,
-  },
-  filterScroll: {
-    paddingBottom: spacing.xs,
-    marginBottom: 2,
-  },
-  filterPill: {
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: borderRadius.xs,
-    backgroundColor: colors.surfaceSubtle,
-    borderWidth: 1,
-    borderColor: colors.border,
-    marginRight: 6,
-  },
-  filterPillActive: {
-    backgroundColor: colors.primaryNavy,
-    borderColor: colors.primaryNavy,
-  },
-  filterPillText: {
-    ...typography.caption,
-    fontSize: 11,
-    color: colors.textSecondary,
-  },
-  filterPillTextActive: {
-    color: colors.surface,
+    color: '#047857',
     fontWeight: '700',
+    fontSize: 11,
   },
-  card: {
-    backgroundColor: colors.surface,
-    borderRadius: borderRadius.md,
-    padding: spacing.md,
-    marginVertical: spacing.xs,
-    borderWidth: 1,
-    borderColor: colors.border,
-    ...shadows.sm,
+  stayCard: {
+    marginBottom: spacing.md,
+    borderRadius: borderRadius.lg,
   },
-  cardTop: {
+  stayTop: {
     flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'flex-start',
+    marginBottom: spacing.sm,
   },
-  cardLeft: {
+  stayIdentity: {
     flex: 1,
-    marginRight: spacing.sm,
   },
   guestName: {
-    ...typography.bodySemiBold,
+    ...typography.subtitle1,
     color: colors.textPrimary,
+    fontWeight: '700',
   },
-  refCode: {
+  stayMeta: {
     ...typography.caption,
     color: colors.textSecondary,
     marginTop: 1,
   },
-  dates: {
+  stayDates: {
     ...typography.caption,
-    fontSize: 11,
     color: colors.textMuted,
     marginTop: 2,
   },
-  assignedRoom: {
-    ...typography.captionBold,
-    color: colors.accentBlue,
-    marginTop: 3,
+  roomBadgeText: {
+    ...typography.captionMedium,
+    color: colors.primaryNavy,
+    marginTop: 4,
   },
-  notesBox: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: colors.primaryTint,
-    borderRadius: borderRadius.xs,
-    padding: 6,
-    marginTop: spacing.xs,
-  },
-  notesText: {
-    ...typography.caption,
-    color: colors.accentBlue,
-    fontSize: 10,
-    flex: 1,
-  },
-  cardBottom: {
+  stayBottom: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginTop: spacing.sm,
-    paddingTop: spacing.xs,
     borderTopWidth: 1,
-    borderTopColor: colors.surfaceSubtle,
+    borderTopColor: '#F1F5F9',
+    paddingTop: spacing.xs,
+    marginTop: spacing.xs,
   },
-  amount: {
-    ...typography.bodySemiBold,
-    color: colors.primaryNavy,
+  folioAmount: {
+    ...typography.captionMedium,
+    color: colors.textPrimary,
+    fontWeight: '700',
   },
-  roomBadgeCircle: {
-    width: 44,
-    height: 44,
-    borderRadius: borderRadius.sm,
+  advancePaidText: {
+    ...typography.caption,
+    color: '#047857',
+  },
+  filterPillsScroll: {
+    flexDirection: 'row',
+    marginBottom: spacing.sm,
+  },
+  statusPill: {
+    paddingHorizontal: spacing.md,
+    paddingVertical: 5,
+    borderRadius: borderRadius.full,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#CBD5E1',
+    marginRight: spacing.xs,
+  },
+  statusPillActive: {
+    backgroundColor: colors.primaryNavy,
+    borderColor: colors.primaryNavy,
+  },
+  statusPillText: {
+    ...typography.caption,
+    color: colors.textSecondary,
+    fontSize: 11,
+  },
+  statusPillTextActive: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+  },
+  roomCard: {
+    marginBottom: spacing.md,
+    borderRadius: borderRadius.lg,
+  },
+  roomTop: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  roomBadge: {
+    width: 48,
+    height: 48,
+    borderRadius: borderRadius.md,
     backgroundColor: colors.primaryNavy,
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: spacing.md,
   },
-  roomNumText: {
-    ...typography.bodySemiBold,
-    color: colors.surface,
-    fontSize: 13,
+  roomNum: {
+    ...typography.subtitle1,
+    color: '#FFFFFF',
+    fontWeight: '800',
   },
-  roomInfo: {
+  roomDetails: {
     flex: 1,
   },
-  roomNameRow: {
+  roomTitleRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
   },
-  roomCategory: {
-    ...typography.bodySemiBold,
+  roomCat: {
+    ...typography.subtitle2,
     color: colors.textPrimary,
+    fontWeight: '700',
   },
-  roomMeta: {
+  roomPrice: {
     ...typography.caption,
     color: colors.textSecondary,
     marginTop: 2,
   },
-  guestInRoom: {
-    ...typography.captionBold,
+  inHouseGuest: {
+    ...typography.captionMedium,
     color: colors.accentBlue,
     marginTop: 2,
   },
-  amenitiesRow: {
+  roomActionsRow: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    marginTop: spacing.xs,
-    paddingTop: 4,
+    justifyContent: 'flex-end',
+    borderTopWidth: 1,
+    borderTopColor: '#F1F5F9',
+    paddingTop: spacing.xs,
+    marginTop: spacing.sm,
   },
-  amenityTag: {
-    backgroundColor: colors.surfaceSubtle,
-    borderRadius: borderRadius.xs,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    marginRight: 4,
-    marginTop: 2,
-  },
-  amenityText: {
-    ...typography.caption,
-    fontSize: 9,
-    color: colors.textSecondary,
-  },
-  emptyState: {
+  markCleanBtn: {
+    flexDirection: 'row',
     alignItems: 'center',
+    backgroundColor: '#ECFDF5',
+    paddingHorizontal: spacing.md,
+    paddingVertical: 6,
+    borderRadius: borderRadius.md,
+  },
+  markCleanText: {
+    ...typography.captionMedium,
+    color: '#047857',
+    fontWeight: '700',
+    marginLeft: 4,
+  },
+  markMaintBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FEF2F2',
+    paddingHorizontal: spacing.md,
+    paddingVertical: 6,
+    borderRadius: borderRadius.md,
+  },
+  markMaintText: {
+    ...typography.captionMedium,
+    color: '#DC2626',
+    fontWeight: '700',
+    marginLeft: 4,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
     justifyContent: 'center',
-    paddingVertical: spacing.xxl,
+    padding: spacing.lg,
   },
-  emptyTitle: {
-    ...typography.h4,
+  modalCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: borderRadius.xl,
+    padding: spacing.lg,
+    maxHeight: '92%',
+    ...shadows.lg,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: spacing.md,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F1F5F9',
+    paddingBottom: spacing.sm,
+  },
+  modalTitle: {
+    ...typography.h3,
     color: colors.textPrimary,
-    marginTop: spacing.md,
   },
-  emptyDesc: {
+  modalSub: {
     ...typography.caption,
     color: colors.textSecondary,
-    textAlign: 'center',
     marginTop: 2,
+  },
+  formSectionLabel: {
+    ...typography.subtitle2,
+    color: colors.textPrimary,
+    marginTop: spacing.sm,
+    marginBottom: spacing.xs,
+  },
+  roomPickScroll: {
+    flexDirection: 'row',
+    marginBottom: spacing.md,
+  },
+  roomPickChip: {
+    padding: spacing.sm,
+    borderRadius: borderRadius.md,
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    marginRight: spacing.xs,
+    alignItems: 'center',
+    minWidth: 80,
+  },
+  roomPickChipActive: {
+    backgroundColor: colors.primaryTint,
+    borderColor: colors.primaryNavy,
+  },
+  roomPickNum: {
+    ...typography.subtitle2,
+    color: colors.textPrimary,
+    fontWeight: '700',
+  },
+  roomPickNumActive: {
+    color: colors.primaryNavy,
+  },
+  roomPickCat: {
+    ...typography.caption,
+    color: colors.textMuted,
+    fontSize: 10,
+  },
+  halfRow: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+  },
+  halfInput: {
+    flex: 1,
+  },
+  extraItemRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingVertical: 3,
+  },
+  extraItemName: {
+    ...typography.captionMedium,
+    color: colors.textSecondary,
+  },
+  extraItemAmt: {
+    ...typography.captionMedium,
+    color: colors.textPrimary,
+    fontWeight: '700',
+  },
+  addExtraRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginVertical: spacing.xs,
+  },
+  billBox: {
+    backgroundColor: '#F8FAFC',
+    borderRadius: borderRadius.md,
+    padding: spacing.md,
+    marginVertical: spacing.md,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  billRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 4,
+  },
+  billLabel: {
+    ...typography.caption,
+    color: colors.textSecondary,
+  },
+  billVal: {
+    ...typography.captionMedium,
+    color: colors.textPrimary,
+  },
+  finalBalanceRow: {
+    borderTopWidth: 1,
+    borderTopColor: '#CBD5E1',
+    paddingTop: spacing.xs,
+    marginTop: spacing.xs,
+  },
+  finalBalanceLabel: {
+    ...typography.subtitle2,
+    color: colors.textPrimary,
+    fontWeight: '800',
+  },
+  finalBalanceVal: {
+    ...typography.subtitle1,
+    color: '#DC2626',
+    fontWeight: '800',
+  },
+  payModeRow: {
+    flexDirection: 'row',
+    gap: spacing.xs,
+    marginBottom: spacing.md,
+  },
+  payModeBtn: {
+    flex: 1,
+    paddingVertical: spacing.xs,
+    borderRadius: borderRadius.md,
+    backgroundColor: '#F1F5F9',
+    alignItems: 'center',
+  },
+  payModeBtnActive: {
+    backgroundColor: '#059669',
+  },
+  payModeText: {
+    ...typography.captionMedium,
+    color: colors.textSecondary,
+  },
+  payModeTextActive: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+  },
+  modalSaveBtn: {
+    marginTop: spacing.md,
+    marginBottom: spacing.md,
   },
 });
+
+export default CheckInRoomsScreen;

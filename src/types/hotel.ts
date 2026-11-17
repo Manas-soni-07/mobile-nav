@@ -12,12 +12,20 @@ export interface HotelSummary {
   name: string;
   code: string;
   location: string;
+  address?: string;
+  city?: string;
+  state?: string;
   starRating: number;
   totalRooms: number;
   contactPhone: string;
+  contactEmail?: string;
+  receptionPhone?: string;
   managerName: string;
   currency: string;
   tagline: string;
+  checkInTime?: string;
+  checkOutTime?: string;
+  status?: 'active' | 'inactive';
 }
 
 // ==========================================
@@ -25,11 +33,26 @@ export interface HotelSummary {
 // ==========================================
 
 export type RoomCategory =
+  | 'Deluxe Room'
+  | 'Super Deluxe Room'
+  | 'Executive Suite'
+  | 'Family Suite'
+  | 'Standard Room'
+  | 'Deluxe AC Room'
+  | 'Standard Non-AC Room'
+  | 'Palace Suite'
+  | 'Royal Family Villa'
+  | 'Heritage Palace Suite'
+  | 'Royal Maharaja Villa'
+  | 'Deluxe Lake View Suite'
+  | 'Garden Haveli Room'
+  | 'Executive Mountain Cottage'
   | 'Deluxe Ocean Suite'
   | 'Royal Penthouse'
   | 'Executive Villa'
   | 'Garden View Villa'
-  | 'Classic King Suite';
+  | 'Classic King Suite'
+  | string;
 
 export type RoomStatus =
   | 'available'
@@ -91,7 +114,15 @@ export interface Booking {
   depositPaid: number;
   paymentStatus: PaymentStatus;
   specialRequests?: string;
+  guestKyc?: GuestKYC;
   createdAt: string;
+  bookingType?: 'normal' | 'event';
+  eventName?: string;
+  requiredRooms?: number;
+  allocatedRooms?: number;
+  remainingRooms?: number;
+  roomPrice?: number;
+  advanceAmount?: number;
 }
 
 // ==========================================
@@ -104,11 +135,12 @@ export type StaffDepartment =
   | 'Food & Beverage'
   | 'Maintenance'
   | 'Security'
-  | 'Management';
+  | 'Management'
+  | 'Reception';
 
 export type StaffShift = 'Morning' | 'Afternoon' | 'Night' | 'Full Day';
 
-export type AttendanceStatus = 'present' | 'absent' | 'on_leave' | 'late';
+export type AttendanceStatus = 'present' | 'absent' | 'on_leave' | 'late' | 'half_day';
 
 export interface StaffMember {
   id: string;
@@ -119,8 +151,72 @@ export interface StaffMember {
   department: StaffDepartment;
   shift: StaffShift;
   status: AttendanceStatus;
+  employmentStatus?: 'ACTIVE' | 'INACTIVE';
   checkInTime?: string;
   phone: string;
+  monthlySalary?: number;
+  joinDate?: string;
+}
+
+export interface StaffAdvance {
+  id: string;
+  hotelId: string;
+  staffId: string;
+  staffName?: string;
+  staffRole?: string;
+  advanceDate: string;
+  amount: number;
+  reason: string;
+  paymentMethod: 'Cash' | 'UPI' | 'Bank Transfer' | string;
+  isDeducted: boolean;
+  deductedMonth?: string;
+  notes?: string;
+  createdAt?: string;
+}
+
+export interface SalaryPayment {
+  id: string;
+  hotelId: string;
+  staffId: string;
+  staffName?: string;
+  month: number;
+  year: number;
+  baseSalary: number;
+  presentDays: number;
+  halfDays: number;
+  absentDays: number;
+  grossSalary: number;
+  advanceDeductions: number;
+  netSalary: number;
+  paymentStatus: 'PAID' | 'PENDING';
+  paidAt?: string;
+}
+
+export interface ManagerUser {
+  id: string;
+  hotelId: string;
+  hotelName?: string;
+  email: string;
+  fullName: string;
+  phone: string;
+  status: 'ACTIVE' | 'INACTIVE';
+  createdAt?: string;
+}
+
+export interface CurrentUser {
+  id: string;
+  email: string;
+  fullName: string;
+  phone?: string;
+  role: 'ADMIN' | 'MANAGER';
+  hotelId: string | null;
+  assignedHotel?: {
+    id: string;
+    name: string;
+    code?: string;
+    contactPhone?: string;
+    address?: string;
+  } | null;
 }
 
 export interface AttendanceSummary {
@@ -141,9 +237,15 @@ export type ChargeCategory =
   | 'room'
   | 'dining'
   | 'spa'
+  | 'transport'
   | 'minibar'
   | 'service'
-  | 'tax';
+  | 'tax'
+  | 'extra_bed'
+  | 'food_beverage'
+  | 'water'
+  | 'laundry'
+  | 'misc';
 
 export interface FolioItem {
   id: string;
@@ -183,16 +285,24 @@ export interface BillingSummary {
 // ==========================================
 
 export type ExpenseCategory =
+  | 'Electricity'
+  | 'Water'
+  | 'Maintenance'
+  | 'Repair'
+  | 'Supplies'
+  | 'Misc'
   | 'F&B Provisions'
   | 'Housekeeping Supplies'
   | 'Utilities & Maintenance'
   | 'Staff Payroll'
   | 'Marketing'
-  | 'Operations';
+  | 'Operations'
+  | string;
 
 export interface ExpenseRecord {
   id: string;
   hotelId: string;
+  hotelName?: string;
   title: string;
   category: ExpenseCategory;
   amount: number;
@@ -200,6 +310,7 @@ export interface ExpenseRecord {
   vendor: string;
   recordedBy: string;
   paymentMethod: string;
+  description?: string;
 }
 
 export interface DailyExpensesSummary {
@@ -250,4 +361,165 @@ export interface OperationalModule {
   badge?: string;
   badgeColor?: 'primary' | 'success' | 'warning' | 'error' | 'info' | 'gold' | 'neutral';
   adminOnly?: boolean;
+}
+
+// ==========================================
+// 8. INDIAN HOSPITALITY OPERATIONS (PHASE 5)
+// ==========================================
+
+export type IdProofType = 'Aadhaar Card' | 'Passport' | 'Driving License' | 'Voter ID';
+
+export interface GuestKYC {
+  idType: IdProofType;
+  idNumber: string;
+  cityOfOrigin: string;
+  verificationStatus: 'verified' | 'pending';
+}
+
+export type BanquetEventType =
+  | 'Destination Wedding'
+  | 'Sangeet & Reception'
+  | 'Corporate Conclave'
+  | 'Royal Anniversary Gala'
+  | 'Sundowner Pool Party';
+
+export interface BanquetEvent {
+  id: string;
+  hotelId: string;
+  eventName: string;
+  eventType: BanquetEventType;
+  clientName: string;
+  clientPhone: string;
+  venueName: string;
+  eventDate: string;
+  guestCount: number;
+  perPlateRate: number;
+  cateringType: 'Pure Vegetarian Jain' | 'Royal Mewari Buffet' | 'Multi-Cuisine Grand Feast';
+  totalAmount: number;
+  depositPaid: number;
+  status: 'confirmed' | 'in_progress' | 'completed' | 'cancelled';
+  decorPackage: string;
+}
+
+export interface DiningOrderItem {
+  id: string;
+  name: string;
+  quantity: number;
+  price: number;
+  category: 'Mains' | 'Starters' | 'Breads & Rice' | 'Beverages' | 'Royal Desserts';
+}
+
+export interface DiningOrder {
+  id: string;
+  hotelId: string;
+  orderNumber: string;
+  roomNumber: string;
+  guestName: string;
+  items: DiningOrderItem[];
+  subtotal: number;
+  gstAmount: number;
+  totalAmount: number;
+  status: 'received' | 'in_kitchen' | 'out_for_delivery' | 'delivered';
+  dietaryNote?: string;
+  createdAt: string;
+}
+
+export type TicketPriority = 'urgent' | 'high' | 'normal';
+
+export type TicketType =
+  | 'Turnover Cleaning'
+  | 'Deep Sanitization'
+  | 'Turndown & Aroma Service'
+  | 'Extra Towels & Linens'
+  | 'Ayurvedic Toiletries Restock'
+  | 'AC & Chiller Maintenance';
+
+export interface HousekeepingTicket {
+  id: string;
+  hotelId: string;
+  roomNumber: string;
+  ticketType: TicketType;
+  priority: TicketPriority;
+  assignedStaffName: string;
+  status: 'pending' | 'in_progress' | 'completed';
+  requestedTime: string;
+  notes?: string;
+}
+
+// ==========================================
+// 9. AYURVEDIC SPA, CONCIERGE & SHIFT AUDIT (PHASE 6)
+// ==========================================
+
+export interface SpaTreatment {
+  id: string;
+  name: string;
+  durationMinutes: number;
+  price: number;
+  category: 'Ayurvedic Therapy' | 'Royal Body Polish' | 'Facial & Glow' | 'Yoga & Meditation';
+  description: string;
+  herbalIngredients: string;
+}
+
+export interface SpaBooking {
+  id: string;
+  hotelId: string;
+  bookingRef: string;
+  roomNumber: string;
+  guestName: string;
+  treatmentName: string;
+  therapistName: string;
+  treatmentRoom: string;
+  timeSlot: string;
+  date: string;
+  price: number;
+  gstAmount: number;
+  totalAmount: number;
+  status: 'scheduled' | 'in_session' | 'completed' | 'cancelled';
+  healthNotes?: string;
+}
+
+export interface ExcursionPackage {
+  id: string;
+  title: string;
+  duration: string;
+  pricePerPerson: number;
+  category: 'Airport Transfer' | 'Heritage Excursion' | 'Nature & Safari' | 'Private Yacht Charter';
+  description: string;
+  includedHighlights: string[];
+}
+
+export interface ConciergeBooking {
+  id: string;
+  hotelId: string;
+  bookingRef: string;
+  roomNumber: string;
+  guestName: string;
+  serviceTitle: string;
+  category: 'Airport Transfer' | 'Heritage Excursion' | 'Nature & Safari' | 'Private Yacht Charter';
+  driverOrGuideName: string;
+  vehicleOrVesselNumber: string;
+  pickupTime: string;
+  date: string;
+  numberOfGuests: number;
+  totalAmount: number;
+  gstAmount: number;
+  status: 'scheduled' | 'in_transit' | 'completed' | 'cancelled';
+  notes?: string;
+}
+
+export interface ShiftHandover {
+  id: string;
+  hotelId: string;
+  outgoingManagerName: string;
+  incomingManagerName: string;
+  shiftFrom: 'Morning' | 'Afternoon' | 'Night';
+  shiftTo: 'Morning' | 'Afternoon' | 'Night';
+  timestamp: string;
+  frontDeskCashCollected: number;
+  upiSettlementsCount: number;
+  upiSettlementsAmount: number;
+  pendingGuestRequestsCount: number;
+  vipGuestsInHouse: string[];
+  keyHandoversNotes: string;
+  status: 'completed' | 'pending_acknowledgment';
 }

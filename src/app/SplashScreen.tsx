@@ -19,8 +19,8 @@ export const SplashScreen: React.FC = () => {
   useEffect(() => {
     // Simulated smooth initialization
     const timer = setTimeout(() => {
-      navigate('role-selection');
-    }, 2400);
+      navigate('login');
+    }, 1500);
 
     return () => clearTimeout(timer);
   }, []);
@@ -37,10 +37,10 @@ export const SplashScreen: React.FC = () => {
           </View>
 
           <Text style={styles.brandTitle}>ResortOS</Text>
-          <Text style={styles.brandSubtitle}>HOSPITALITY MANAGEMENT SYSTEM</Text>
+          <Text style={styles.brandSubtitle}>HOTEL & RESORT MANAGEMENT</Text>
 
           <View style={styles.versionBadge}>
-            <Text style={styles.versionText}>Enterprise Edition v1.0</Text>
+            <Text style={styles.versionText}>THE VILLA & NAVKAR PALACE</Text>
           </View>
         </View>
 
@@ -48,13 +48,13 @@ export const SplashScreen: React.FC = () => {
         <View style={styles.footerWrapper}>
           <View style={styles.statusBox}>
             <ActivityIndicator size="small" color={colors.primaryNavy} style={styles.spinner} />
-            <Text style={styles.statusText}>Initializing secure environment...</Text>
+            <Text style={styles.statusText}>Connecting to ResortOS Cloud...</Text>
           </View>
 
-          {/* Quick Skip Button for instant preview testing */}
+          {/* Quick Skip Button */}
           <Button
-            title="Continue to Role Selection"
-            onPress={() => navigate('role-selection')}
+            title="Continue to Login"
+            onPress={() => navigate('login')}
             variant="ghost"
             size="sm"
             style={styles.skipButton}

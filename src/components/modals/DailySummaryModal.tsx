@@ -109,30 +109,30 @@ export const DailySummaryModal: React.FC<DailySummaryModalProps> = ({
             <View style={styles.streamRow}>
               <View style={styles.streamLeft}>
                 <View style={[styles.dot, { backgroundColor: colors.accentBlue }]} />
-                <Text style={styles.streamName}>Room Accommodations</Text>
+                <Text style={styles.streamName}>Palace Rooms, Havelis & Suites</Text>
               </View>
-              <Text style={styles.streamPct}>68%</Text>
+              <Text style={styles.streamPct}>65%</Text>
             </View>
             <View style={styles.streamRow}>
               <View style={styles.streamLeft}>
                 <View style={[styles.dot, { backgroundColor: colors.success }]} />
-                <Text style={styles.streamName}>Fine Dining & Lounges</Text>
+                <Text style={styles.streamName}>Mewar Thali & Royal Dining</Text>
               </View>
               <Text style={styles.streamPct}>18%</Text>
             </View>
             <View style={styles.streamRow}>
               <View style={styles.streamLeft}>
                 <View style={[styles.dot, { backgroundColor: colors.goldAccent }]} />
-                <Text style={styles.streamName}>Spa & Wellness Sanctuary</Text>
+                <Text style={styles.streamName}>Ayurvedic Spa & Herbal Therapy</Text>
               </View>
               <Text style={styles.streamPct}>9%</Text>
             </View>
             <View style={styles.streamRow}>
               <View style={styles.streamLeft}>
                 <View style={[styles.dot, { backgroundColor: colors.primaryNavy }]} />
-                <Text style={styles.streamName}>Cabana & Yacht Services</Text>
+                <Text style={styles.streamName}>Destination Weddings & Banquets</Text>
               </View>
-              <Text style={styles.streamPct}>5%</Text>
+              <Text style={styles.streamPct}>8%</Text>
             </View>
           </View>
 

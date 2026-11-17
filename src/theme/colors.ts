@@ -33,7 +33,9 @@ export const colors = {
 
   // Optional warm gold/amber touch for VIP / luxury accents
   goldAccent: '#B45309',        // Warm Amber 700
+  goldDark: '#92400E',          // Amber 800 - rich luxury gold text
   goldLight: '#FEF3C7',         // Warm Amber 100
+  goldBorder: '#FDE68A',        // Amber 200
 
   // Typography
   textPrimary: '#0F172A',       // Slate 900 - rich charcoal
