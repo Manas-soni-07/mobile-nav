@@ -13,6 +13,8 @@ import {
   TouchableOpacity,
   Modal,
   Alert,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import { colors } from '../theme/colors';
 import { typography } from '../theme/typography';
@@ -176,6 +178,7 @@ export const ManagersManagementScreen: React.FC = () => {
       <ScrollView
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
       >
         {/* Security Rule Banner */}
         <View style={styles.ruleBanner}>
@@ -273,7 +276,10 @@ export const ManagersManagementScreen: React.FC = () => {
         transparent
         onRequestClose={() => setModalVisible(false)}
       >
-        <View style={styles.modalOverlay}>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          style={styles.modalOverlay}
+        >
           <View style={styles.modalCard}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>
@@ -284,7 +290,7 @@ export const ManagersManagementScreen: React.FC = () => {
               </TouchableOpacity>
             </View>
 
-            <ScrollView showsVerticalScrollIndicator={false}>
+            <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
               <Input
                 label="Manager Full Name *"
                 placeholder="e.g. Sunita Sharma"
@@ -356,7 +362,7 @@ export const ManagersManagementScreen: React.FC = () => {
               />
             </ScrollView>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
 
       {/* Password Reset Modal */}
@@ -366,7 +372,10 @@ export const ManagersManagementScreen: React.FC = () => {
         transparent
         onRequestClose={() => setResetModalVisible(false)}
       >
-        <View style={styles.modalOverlay}>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          style={styles.modalOverlay}
+        >
           <View style={[styles.modalCard, styles.smallModal]}>
             <Text style={styles.modalTitle}>Reset Manager Password</Text>
             <Text style={styles.resetSub}>
@@ -397,7 +406,7 @@ export const ManagersManagementScreen: React.FC = () => {
               />
             </View>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
     </SafeAreaView>
   );

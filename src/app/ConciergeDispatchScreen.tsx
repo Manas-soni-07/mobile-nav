@@ -8,6 +8,8 @@ import {
   SafeAreaView,
   Modal,
   Alert,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import { colors } from '../theme/colors';
 import { typography } from '../theme/typography';
@@ -205,6 +207,7 @@ export const ConciergeDispatchScreen: React.FC = () => {
       <ScrollView
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
       >
         {/* TOP STATUS CARDS */}
         <View style={styles.metricsRow}>
@@ -446,7 +449,10 @@ export const ConciergeDispatchScreen: React.FC = () => {
         transparent={true}
         onRequestClose={() => setShowAddModal(false)}
       >
-        <View style={styles.modalOverlay}>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          style={styles.modalOverlay}
+        >
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
               <View>
@@ -466,6 +472,7 @@ export const ConciergeDispatchScreen: React.FC = () => {
             <ScrollView
               contentContainerStyle={styles.modalScroll}
               showsVerticalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
             >
               {/* Room Picker */}
               <Text style={styles.formSectionLabel}>SELECT OCCUPIED ROOM</Text>
@@ -638,7 +645,7 @@ export const ConciergeDispatchScreen: React.FC = () => {
               </View>
             </ScrollView>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
     </SafeAreaView>
   );

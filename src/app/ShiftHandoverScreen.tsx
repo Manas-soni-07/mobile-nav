@@ -8,6 +8,8 @@ import {
   SafeAreaView,
   Modal,
   Alert,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import { colors } from '../theme/colors';
 import { typography } from '../theme/typography';
@@ -122,6 +124,7 @@ export const ShiftHandoverScreen: React.FC = () => {
       <ScrollView
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
       >
         {/* LIVE SHIFT DRAWER & KPI BANNER */}
         <View style={styles.liveAuditCard}>
@@ -240,7 +243,10 @@ export const ShiftHandoverScreen: React.FC = () => {
         transparent={true}
         onRequestClose={() => setShowAddModal(false)}
       >
-        <View style={styles.modalOverlay}>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          style={styles.modalOverlay}
+        >
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
               <View>
@@ -260,6 +266,7 @@ export const ShiftHandoverScreen: React.FC = () => {
             <ScrollView
               contentContainerStyle={styles.modalScroll}
               showsVerticalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
             >
               <View style={styles.formRow}>
                 <Input
@@ -352,7 +359,7 @@ export const ShiftHandoverScreen: React.FC = () => {
               </View>
             </ScrollView>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
     </SafeAreaView>
   );

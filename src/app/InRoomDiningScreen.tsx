@@ -266,6 +266,7 @@ export const InRoomDiningScreen: React.FC = () => {
       <ScrollView
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
       >
         {/* ======================================================== */}
         {/* TAB 1: LIVE KOT ORDERS                                   */}

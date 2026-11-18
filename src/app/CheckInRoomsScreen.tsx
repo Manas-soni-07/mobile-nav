@@ -14,6 +14,8 @@ import {
   SafeAreaView,
   Modal,
   Alert,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import { colors } from '../theme/colors';
 import { typography } from '../theme/typography';
@@ -261,7 +263,7 @@ export const CheckInRoomsScreen: React.FC = () => {
         </TouchableOpacity>
       </View>
 
-      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
         {/* Search Input */}
         <Input
           placeholder={
@@ -439,7 +441,10 @@ export const CheckInRoomsScreen: React.FC = () => {
 
       {/* WALK-IN CHECK-IN MODAL */}
       <Modal visible={showWalkInModal} animationType="slide" transparent>
-        <View style={styles.modalOverlay}>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          style={styles.modalOverlay}
+        >
           <View style={styles.modalCard}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>Fast Walk-In Check-In</Text>
@@ -448,7 +453,7 @@ export const CheckInRoomsScreen: React.FC = () => {
               </TouchableOpacity>
             </View>
 
-            <ScrollView showsVerticalScrollIndicator={false}>
+            <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
               {/* Room Selector */}
               <Text style={styles.formSectionLabel}>Select Vacant Clean Room *</Text>
               <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.roomPickScroll}>
@@ -532,12 +537,15 @@ export const CheckInRoomsScreen: React.FC = () => {
               />
             </ScrollView>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
 
       {/* CHECK-OUT FOLIO SETTLEMENT MODAL (SECTION 13 MANDATE) */}
       <Modal visible={showCheckOutModal} animationType="slide" transparent>
-        <View style={styles.modalOverlay}>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          style={styles.modalOverlay}
+        >
           <View style={styles.modalCard}>
             <View style={styles.modalHeader}>
               <View>
@@ -551,7 +559,7 @@ export const CheckInRoomsScreen: React.FC = () => {
               </TouchableOpacity>
             </View>
 
-            <ScrollView showsVerticalScrollIndicator={false}>
+            <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
               {/* Extra Items List */}
               <Text style={styles.formSectionLabel}>Extra Line Charges (Food, Water, Laundry)</Text>
               {extraItems.map((item) => (
@@ -646,7 +654,7 @@ export const CheckInRoomsScreen: React.FC = () => {
               />
             </ScrollView>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
     </SafeAreaView>
   );

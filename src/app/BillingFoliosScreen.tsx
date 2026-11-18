@@ -217,7 +217,7 @@ Thank you for staying at ${hName}!`;
         onBack={goBack}
       />
 
-      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
         {/* Hotel Filter (Admin Only) */}
         {isAdmin ? (
           <View style={styles.hotelFilterContainer}>
@@ -451,7 +451,7 @@ Thank you for staying at ${hName}!`;
             </TouchableOpacity>
           </View>
 
-          <ScrollView contentContainerStyle={styles.modalBody}>
+          <ScrollView contentContainerStyle={styles.modalBody} keyboardShouldPersistTaps="handled">
             <Text style={styles.formSectionLabel}>CHARGE CATEGORY:</Text>
             <View style={styles.categoryGrid}>
               {categories.map((cat) => (

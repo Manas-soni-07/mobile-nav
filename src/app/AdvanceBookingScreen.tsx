@@ -14,6 +14,8 @@ import {
   SafeAreaView,
   Modal,
   Alert,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import { colors } from '../theme/colors';
 import { typography } from '../theme/typography';
@@ -230,7 +232,7 @@ export const AdvanceBookingScreen: React.FC = () => {
         </TouchableOpacity>
       </View>
 
-      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
         {/* Search Bar */}
         <Input
           placeholder={
@@ -396,7 +398,10 @@ export const AdvanceBookingScreen: React.FC = () => {
 
       {/* Add Booking Modal (Normal or Event) */}
       <Modal visible={showAddModal} animationType="slide" transparent>
-        <View style={styles.modalOverlay}>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          style={styles.modalOverlay}
+        >
           <View style={styles.modalCard}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>
@@ -407,7 +412,7 @@ export const AdvanceBookingScreen: React.FC = () => {
               </TouchableOpacity>
             </View>
 
-            <ScrollView showsVerticalScrollIndicator={false}>
+            <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
               {bookingType === 'event' && (
                 <Input
                   label="Event Name *"
@@ -558,12 +563,15 @@ export const AdvanceBookingScreen: React.FC = () => {
               />
             </ScrollView>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
 
       {/* Allocate Additional Rooms Modal */}
       <Modal visible={allocateModalVisible} animationType="fade" transparent>
-        <View style={styles.modalOverlay}>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          style={styles.modalOverlay}
+        >
           <View style={[styles.modalCard, styles.smallModal]}>
             <Text style={styles.modalTitle}>Allocate Additional Rooms</Text>
             <Text style={styles.eventSubTitle}>
@@ -602,7 +610,7 @@ export const AdvanceBookingScreen: React.FC = () => {
               />
             </View>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
     </SafeAreaView>
   );

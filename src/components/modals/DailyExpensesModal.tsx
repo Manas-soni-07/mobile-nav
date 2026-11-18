@@ -183,6 +183,7 @@ export const DailyExpensesModal: React.FC<DailyExpensesModalProps> = ({
         <ScrollView
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
         >
           {expenses.map((e) => (
             <View key={e.id} style={styles.expenseCard}>

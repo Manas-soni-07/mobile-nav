@@ -189,7 +189,7 @@ export const AttendanceScreen: React.FC = () => {
         }
       />
 
-      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
         {/* Hotel Filter Pills (Admin Only) */}
         {isAdmin ? (
           <View style={styles.hotelFilterContainer}>
@@ -489,7 +489,7 @@ export const AttendanceScreen: React.FC = () => {
             </TouchableOpacity>
           </View>
 
-          <ScrollView contentContainerStyle={styles.modalBody}>
+          <ScrollView contentContainerStyle={styles.modalBody} keyboardShouldPersistTaps="handled">
             {/* If Admin, choose Hotel */}
             {isAdmin && (
               <View style={styles.formSection}>

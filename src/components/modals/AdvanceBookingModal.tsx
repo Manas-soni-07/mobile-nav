@@ -162,6 +162,7 @@ export const AdvanceBookingModal: React.FC<AdvanceBookingModalProps> = ({
         <ScrollView
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
         >
           {advanceBookings.map((b) => (
             <View key={b.id} style={styles.bookingCard}>

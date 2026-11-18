@@ -8,13 +8,14 @@ import {
   StyleSheet,
   ViewStyle,
   TextStyle,
+  Platform,
 } from 'react-native';
 import { colors } from '../../theme/colors';
 import { typography } from '../../theme/typography';
 import { spacing, borderRadius } from '../../theme/spacing';
 import { Icon, IconName } from './Icon';
 
-interface InputProps extends Omit<TextInputProps, 'style'> {
+export interface InputProps extends Omit<TextInputProps, 'style'> {
   label?: string;
   error?: string;
   helperText?: string;
@@ -39,6 +40,9 @@ export const Input: React.FC<InputProps> = ({
   style,
   inputStyle,
   placeholderTextColor = colors.textMuted,
+  onFocus,
+  onBlur,
+  multiline,
   ...rest
 }) => {
   const [isFocused, setIsFocused] = useState(false);
@@ -47,6 +51,16 @@ export const Input: React.FC<InputProps> = ({
   const hasError = Boolean(error);
   const secureTextEntry = isPassword ? !showPassword : rest.secureTextEntry;
 
+  const handleFocus: TextInputProps['onFocus'] = (e) => {
+    setIsFocused(true);
+    onFocus?.(e);
+  };
+
+  const handleBlur: TextInputProps['onBlur'] = (e) => {
+    setIsFocused(false);
+    onBlur?.(e);
+  };
+
   return (
     <View style={[styles.container, containerStyle, style]}>
       {label && <Text style={styles.label}>{label}</Text>}
@@ -54,12 +68,13 @@ export const Input: React.FC<InputProps> = ({
       <View
         style={[
           styles.inputWrapper,
+          multiline && styles.inputWrapperMultiline,
           isFocused && styles.inputWrapperFocused,
           hasError && styles.inputWrapperError,
         ]}
       >
         {leftIcon && (
-          <View style={styles.leftIconContainer}>
+          <View style={[styles.leftIconContainer, multiline && styles.leftIconContainerMultiline]}>
             <Icon
               name={leftIcon}
               size={18}
@@ -69,11 +84,17 @@ export const Input: React.FC<InputProps> = ({
         )}
 
         <TextInput
-          style={[styles.input, inputStyle]}
+          style={[
+            styles.input,
+            multiline && styles.multilineInput,
+            inputStyle,
+          ]}
           placeholderTextColor={placeholderTextColor}
           secureTextEntry={secureTextEntry}
-          onFocus={() => setIsFocused(true)}
-          onBlur={() => setIsFocused(false)}
+          onFocus={handleFocus}
+          onBlur={handleBlur}
+          multiline={multiline}
+          textAlignVertical={multiline ? 'top' : 'center'}
           {...rest}
         />
 
@@ -129,20 +150,20 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: colors.surface,
-    borderWidth: 1.2,
+    borderWidth: 1.5,
     borderColor: colors.border,
     borderRadius: borderRadius.md,
     minHeight: 46,
     paddingHorizontal: spacing.md,
   },
+  inputWrapperMultiline: {
+    alignItems: 'flex-start',
+    paddingVertical: spacing.sm,
+    minHeight: 84,
+  },
   inputWrapperFocused: {
     borderColor: colors.accentBlue,
-    backgroundColor: colors.surface,
-    shadowColor: colors.accentBlue,
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
+    backgroundColor: '#FAFCFF',
   },
   inputWrapperError: {
     borderColor: colors.error,
@@ -151,11 +172,22 @@ const styles = StyleSheet.create({
   leftIconContainer: {
     marginRight: spacing.sm,
   },
+  leftIconContainerMultiline: {
+    marginTop: 2,
+  },
   input: {
     flex: 1,
-    ...typography.body,
+    fontSize: 14,
+    fontWeight: '400',
     color: colors.textPrimary,
-    paddingVertical: spacing.sm,
+    paddingVertical: Platform.OS === 'ios' ? spacing.sm : 6,
+    paddingHorizontal: 0,
+    // Note: Do NOT use lineHeight here - in React Native on Android and iOS it causes cursor jumping,
+    // text clipping, and vertical jitter when typing.
+  },
+  multilineInput: {
+    minHeight: 70,
+    textAlignVertical: 'top',
   },
   rightIconButton: {
     padding: spacing.xs,

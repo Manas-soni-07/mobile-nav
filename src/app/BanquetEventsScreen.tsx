@@ -8,6 +8,8 @@ import {
   SafeAreaView,
   Modal,
   Alert,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import { colors } from '../theme/colors';
 import { typography } from '../theme/typography';
@@ -185,6 +187,7 @@ export const BanquetEventsScreen: React.FC = () => {
       <ScrollView
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
       >
         {/* EXECUTIVE REVENUE & GUEST PACK TILES */}
         <View style={styles.metricsRow}>
@@ -398,7 +401,10 @@ export const BanquetEventsScreen: React.FC = () => {
         transparent={true}
         onRequestClose={() => setShowAddModal(false)}
       >
-        <View style={styles.modalOverlay}>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          style={styles.modalOverlay}
+        >
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
               <View>
@@ -416,6 +422,7 @@ export const BanquetEventsScreen: React.FC = () => {
             <ScrollView
               contentContainerStyle={styles.modalScroll}
               showsVerticalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
             >
               <Input
                 label="Event Name"
@@ -567,7 +574,7 @@ export const BanquetEventsScreen: React.FC = () => {
               </View>
             </ScrollView>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
     </SafeAreaView>
   );

@@ -8,6 +8,8 @@ import {
   SafeAreaView,
   Modal,
   Alert,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import { colors } from '../theme/colors';
 import { typography } from '../theme/typography';
@@ -228,6 +230,7 @@ export const AyurvedicSpaScreen: React.FC = () => {
       <ScrollView
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
       >
         {/* TOP REVENUE & SESSION METRICS */}
         <View style={styles.metricsRow}>
@@ -489,7 +492,10 @@ export const AyurvedicSpaScreen: React.FC = () => {
         transparent={true}
         onRequestClose={() => setShowAddModal(false)}
       >
-        <View style={styles.modalOverlay}>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          style={styles.modalOverlay}
+        >
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
               <View>
@@ -509,6 +515,7 @@ export const AyurvedicSpaScreen: React.FC = () => {
             <ScrollView
               contentContainerStyle={styles.modalScroll}
               showsVerticalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
             >
               {/* Room Picker */}
               <Text style={styles.formSectionLabel}>SELECT OCCUPIED SUITE / ROOM</Text>
@@ -658,7 +665,7 @@ export const AyurvedicSpaScreen: React.FC = () => {
               </View>
             </ScrollView>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
     </SafeAreaView>
   );
