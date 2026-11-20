@@ -16,8 +16,35 @@ const HOST = process.env.HOST || '0.0.0.0';
 app.use(cors());
 app.use(express.json());
 
+// Step 4: Development Request & Performance Logger (Zero secrets logged)
+app.use((req, res, next) => {
+  const reqStart = Date.now();
+  const timestamp = new Date().toISOString();
+  const method = req.method;
+  const url = req.originalUrl || req.url;
+  const clientIp = req.headers['x-forwarded-for'] || req.socket?.remoteAddress || 'unknown';
+
+  console.log(`[REQ] ${timestamp} | ${method} ${url} | Client: ${clientIp}`);
+
+  res.on('finish', () => {
+    const duration = Date.now() - reqStart;
+    console.log(`[RES] ${new Date().toISOString()} | ${method} ${url} -> HTTP ${res.statusCode} (${duration}ms)`);
+  });
+
+  next();
+});
+
 // Mount API routes
 app.use('/api', apiRoutes);
+
+// Global Error Handler with stack trace logging
+app.use((err, req, res, next) => {
+  console.error(`[SERVER ERROR] ${new Date().toISOString()} | ${req.method} ${req.url}`);
+  console.error(err.stack || err.message);
+  if (!res.headersSent) {
+    res.status(500).json({ error: 'Internal Server Error', message: err.message });
+  }
+});
 
 // Root greeting
 app.get('/', (req, res) => {

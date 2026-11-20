@@ -22,6 +22,28 @@ const pool = mysql.createPool({
   queueLimit: 0,
 });
 
+// Database query duration logging wrapper (Zero passwords/secrets logged)
+const originalQuery = pool.query.bind(pool);
+pool.query = async function (sql, values) {
+  const start = Date.now();
+  try {
+    const result = await originalQuery(sql, values);
+    const duration = Date.now() - start;
+    const sqlPreview = typeof sql === 'string' 
+      ? sql.trim().replace(/\s+/g, ' ').substring(0, 75) 
+      : 'query';
+    console.log(`  [DB QUERY] duration=${duration}ms | ${sqlPreview}...`);
+    return result;
+  } catch (err) {
+    const duration = Date.now() - start;
+    console.error(`  [DB ERROR] duration=${duration}ms | ${err.message}`);
+    if (err.stack) {
+      console.error(err.stack);
+    }
+    throw err;
+  }
+};
+
 pool.getConnection()
   .then((conn) => {
     console.log("✓ TiDB Cloud MySQL pool initialized and connected to 'resortos' database!");
