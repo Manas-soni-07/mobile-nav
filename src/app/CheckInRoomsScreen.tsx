@@ -39,7 +39,7 @@ interface ExtraChargeItem {
 }
 
 export const CheckInRoomsScreen: React.FC = () => {
-  const { goBack } = useNavigation();
+  const { goBack, params, currentScreen } = useNavigation();
   const {
     todayArrivals,
     rooms,
@@ -53,7 +53,9 @@ export const CheckInRoomsScreen: React.FC = () => {
     reassignRoom,
   } = useHotel();
 
-  const [activeTab, setActiveTab] = useState<'arrivals' | 'inventory'>('arrivals');
+  const [activeTab, setActiveTab] = useState<'arrivals' | 'inventory'>(
+    currentScreen === 'rooms' || params?.initialTab === 'inventory' ? 'inventory' : 'arrivals'
+  );
   const [searchQuery, setSearchQuery] = useState('');
   const [roomStatusFilter, setRoomStatusFilter] = useState<string>('ALL');
 
@@ -428,7 +430,7 @@ export const CheckInRoomsScreen: React.FC = () => {
   return (
     <SafeAreaView style={styles.safeArea}>
       <Header
-        title="Check-In & Check-Out"
+        title={currentScreen === 'rooms' ? 'Room Management' : 'Check-In & Check-Out'}
         subtitle={`${selectedHotel.name} • ${hotelRooms.length} Rooms`}
         hotelBadge={`${availableRooms.length} AVAILABLE`}
         showBack
@@ -459,7 +461,7 @@ export const CheckInRoomsScreen: React.FC = () => {
           onPress={() => setActiveTab('inventory')}
         >
           <Text style={[styles.tabText, activeTab === 'inventory' && styles.tabTextActive]}>
-            Room Inventory ({hotelRooms.length})
+            Rooms & Status Grid ({hotelRooms.length})
           </Text>
         </TouchableOpacity>
       </View>

@@ -62,6 +62,7 @@ export const AdvanceBookingScreen: React.FC = () => {
   const [advanceAmount, setAdvanceAmount] = useState('2500');
   const [paymentMethod, setPaymentMethod] = useState<'Cash' | 'UPI' | 'Card'>('UPI');
   const [specialNotes, setSpecialNotes] = useState('');
+  const [submitting, setSubmitting] = useState(false);
 
   // Event specific fields
   const [eventName, setEventName] = useState('');
@@ -120,7 +121,9 @@ export const AdvanceBookingScreen: React.FC = () => {
     setShowAddModal(true);
   };
 
-  const handleCreateBooking = () => {
+  const handleCreateBooking = async () => {
+    if (submitting) return;
+
     if (!guestName.trim()) {
       Alert.alert('Required Field', 'Please enter guest / customer name');
       return;
@@ -137,32 +140,43 @@ export const AdvanceBookingScreen: React.FC = () => {
     const rem = Math.max(0, req - alloc);
     const advance = parseFloat(advanceAmount) || 0;
 
-    createBooking({
-      hotelId: selectedHotel.id,
-      guestName,
-      guestPhone,
-      guestEmail: guestEmail || `${guestName.toLowerCase().replace(/\s+/g, '')}@gmail.com`,
-      roomCategory: roomType as any,
-      checkInDate,
-      checkOutDate,
-      nightsCount: 3,
-      numberOfGuests: parseInt(adults, 10) + parseInt(children, 10),
-      status: 'confirmed',
-      totalAmount: price * (bookingType === 'event' ? alloc : count) * 3,
-      depositPaid: advance,
-      paymentStatus: advance > 0 ? 'partial' : 'unpaid',
-      specialRequests: specialNotes,
-      bookingType,
-      eventName: bookingType === 'event' ? eventName : undefined,
-      requiredRooms: bookingType === 'event' ? req : undefined,
-      allocatedRooms: bookingType === 'event' ? alloc : undefined,
-      remainingRooms: bookingType === 'event' ? rem : undefined,
-      roomPrice: price,
-      advanceAmount: advance,
-    });
+    setSubmitting(true);
+    try {
+      await createBooking({
+        hotelId: selectedHotel.id,
+        guestName,
+        guestPhone,
+        guestEmail: guestEmail || `${guestName.toLowerCase().replace(/\s+/g, '')}@gmail.com`,
+        roomCategory: roomType as any,
+        checkInDate,
+        checkOutDate,
+        nightsCount: 3,
+        numberOfGuests: parseInt(adults, 10) + parseInt(children, 10),
+        status: 'confirmed',
+        totalAmount: price * (bookingType === 'event' ? alloc : count) * 3,
+        depositPaid: advance,
+        paymentStatus: advance > 0 ? 'partial' : 'unpaid',
+        specialRequests: specialNotes,
+        bookingType,
+        eventName: bookingType === 'event' ? eventName : undefined,
+        requiredRooms: bookingType === 'event' ? req : undefined,
+        allocatedRooms: bookingType === 'event' ? alloc : undefined,
+        remainingRooms: bookingType === 'event' ? rem : undefined,
+        roomPrice: price,
+        advanceAmount: advance,
+      });
 
-    setShowAddModal(false);
-    Alert.alert('Success', 'Booking confirmed and recorded in system.');
+      setShowAddModal(false);
+      Alert.alert('Success', 'Booking confirmed and recorded in database.');
+    } catch (err: any) {
+      console.error('Failed to create booking:', err);
+      Alert.alert(
+        'Database Error',
+        err?.message || 'Failed to persist booking to TiDB Cloud. Please check your connection and retry.'
+      );
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const openAllocateModal = (booking: Booking) => {
@@ -407,7 +421,10 @@ export const AdvanceBookingScreen: React.FC = () => {
               <Text style={styles.modalTitle}>
                 {bookingType === 'normal' ? 'New Room Reservation' : 'New Event Room Booking'}
               </Text>
-              <TouchableOpacity onPress={() => setShowAddModal(false)}>
+              <TouchableOpacity
+                onPress={() => !submitting && setShowAddModal(false)}
+                disabled={submitting}
+              >
                 <Icon name="x" size={22} color={colors.textSecondary} />
               </TouchableOpacity>
             </View>
@@ -555,7 +572,15 @@ export const AdvanceBookingScreen: React.FC = () => {
               />
 
               <Button
-                title={bookingType === 'event' ? 'Confirm Event Room Booking' : 'Confirm Room Booking'}
+                title={
+                  submitting
+                    ? 'Saving to Database...'
+                    : bookingType === 'event'
+                    ? 'Confirm Event Room Booking'
+                    : 'Confirm Room Booking'
+                }
+                loading={submitting}
+                disabled={submitting}
                 onPress={handleCreateBooking}
                 variant="primary"
                 size="lg"

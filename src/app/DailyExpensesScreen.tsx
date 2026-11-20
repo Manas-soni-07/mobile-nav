@@ -57,6 +57,7 @@ export const DailyExpensesScreen: React.FC = () => {
   const [paymentMethod, setPaymentMethod] = useState<'Cash' | 'UPI' | 'Bank Transfer'>('UPI');
   const [description, setDescription] = useState('');
   const [expenseDate, setExpenseDate] = useState('2026-11-17');
+  const [submitting, setSubmitting] = useState(false);
 
   // Categories specified in ResortOS master requirements
   const categories: (ExpenseCategory | 'ALL')[] = [
@@ -113,7 +114,9 @@ export const DailyExpensesScreen: React.FC = () => {
     return h ? h.name : id;
   };
 
-  const handleRecordExpense = () => {
+  const handleRecordExpense = async () => {
+    if (submitting) return;
+
     if (!title.trim() || !vendor.trim()) {
       Alert.alert('Required Fields', 'Please enter expense title and recipient (Paid To).');
       return;
@@ -128,24 +131,38 @@ export const DailyExpensesScreen: React.FC = () => {
     const hId = isAdmin ? targetHotelId : managerAssignedHotelId;
     const hName = getHotelName(hId);
 
-    recordExpense({
-      hotelId: hId,
-      hotelName: hName,
-      title: title.trim(),
-      category,
-      amount: numAmount,
-      vendor: vendor.trim(),
-      recordedBy: currentUser ? `${currentUser.fullName} (${currentUser.role})` : 'Manager',
-      paymentMethod,
-      description: description.trim() || undefined,
-    });
+    setSubmitting(true);
+    try {
+      await recordExpense({
+        hotelId: hId,
+        hotelName: hName,
+        title: title.trim(),
+        category,
+        amount: numAmount,
+        vendor: vendor.trim(),
+        recordedBy: currentUser ? `${currentUser.fullName} (${currentUser.role})` : 'Manager',
+        paymentMethod,
+        description: description.trim() || undefined,
+      });
 
-    setTitle('');
-    setAmount('');
-    setVendor('');
-    setDescription('');
-    setShowAddModal(false);
-    Alert.alert('Expense Recorded', `₹ ${numAmount.toLocaleString('en-IN')} logged under ${category}.`);
+      setTitle('');
+      setAmount('');
+      setVendor('');
+      setDescription('');
+      setShowAddModal(false);
+      Alert.alert(
+        'Expense Recorded',
+        `₹ ${numAmount.toLocaleString('en-IN')} logged under ${category} and saved to database.`
+      );
+    } catch (err: any) {
+      console.error('Failed to record expense:', err);
+      Alert.alert(
+        'Database Error',
+        err?.message || 'Failed to persist expense record to TiDB Cloud. Please check your connection and retry.'
+      );
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const getCategoryBadgeColor = (cat: string) => {
@@ -378,7 +395,11 @@ export const DailyExpensesScreen: React.FC = () => {
         <SafeAreaView style={styles.safeArea}>
           <View style={styles.modalHeader}>
             <Text style={styles.modalTitle}>Record Property Expense</Text>
-            <TouchableOpacity onPress={() => setShowAddModal(false)} style={styles.modalCloseBtn}>
+            <TouchableOpacity
+              onPress={() => !submitting && setShowAddModal(false)}
+              disabled={submitting}
+              style={[styles.modalCloseBtn, submitting && { opacity: 0.5 }]}
+            >
               <Icon name="x" size={18} color={colors.textSecondary} />
             </TouchableOpacity>
           </View>
@@ -491,9 +512,11 @@ export const DailyExpensesScreen: React.FC = () => {
             />
 
             <Button
-              title="Save Expense Voucher"
+              title={submitting ? "Saving to Database..." : "Save Expense Voucher"}
               variant="primary"
               size="lg"
+              loading={submitting}
+              disabled={submitting}
               onPress={handleRecordExpense}
               style={{ marginTop: spacing.md }}
             />

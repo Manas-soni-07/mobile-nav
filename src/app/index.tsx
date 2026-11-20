@@ -18,12 +18,6 @@ import { CheckInRoomsScreen } from './CheckInRoomsScreen';
 import { BillingFoliosScreen } from './BillingFoliosScreen';
 import { DailyExpensesScreen } from './DailyExpensesScreen';
 import { DailySummaryScreen } from './DailySummaryScreen';
-import { BanquetEventsScreen } from './BanquetEventsScreen';
-import { InRoomDiningScreen } from './InRoomDiningScreen';
-import { HousekeepingDispatchScreen } from './HousekeepingDispatchScreen';
-import { AyurvedicSpaScreen } from './AyurvedicSpaScreen';
-import { ConciergeDispatchScreen } from './ConciergeDispatchScreen';
-import { ShiftHandoverScreen } from './ShiftHandoverScreen';
 import { CloudSyncScreen } from './CloudSyncScreen';
 import { colors } from '../theme/colors';
 
@@ -68,18 +62,6 @@ export const MainAppNavigator: React.FC = () => {
         return <DailyExpensesScreen />;
       case 'daily-summary':
         return <DailySummaryScreen />;
-      case 'banquets-events':
-        return <BanquetEventsScreen />;
-      case 'in-room-dining':
-        return <InRoomDiningScreen />;
-      case 'housekeeping-dispatch':
-        return <HousekeepingDispatchScreen />;
-      case 'ayurvedic-spa':
-        return <AyurvedicSpaScreen />;
-      case 'concierge-dispatch':
-        return <ConciergeDispatchScreen />;
-      case 'shift-handover':
-        return <ShiftHandoverScreen />;
       case 'cloud-sync':
         return <CloudSyncScreen />;
       default:

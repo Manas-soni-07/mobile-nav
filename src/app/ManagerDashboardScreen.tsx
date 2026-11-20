@@ -147,55 +147,71 @@ export const ManagerDashboardScreen: React.FC = () => {
     ]);
   };
 
-  // 7 Manager Navigation Modules
+  // 8 Core Manager Operations Modules
   const managerModules: { id: string; title: string; subtitle: string; icon: IconName; screen: any; color: string }[] = [
     {
+      id: 'mod-rooms',
+      title: '1. Room Management',
+      subtitle: 'Live room status: Available, Cleaning, Maintenance, Occupied',
+      icon: 'grid',
+      screen: 'rooms',
+      color: '#0284C7',
+    },
+    {
       id: 'mod-advance-booking',
-      title: '1. Advance Booking',
-      subtitle: 'Normal reservations & Event room allocation',
+      title: '2. Advance Booking',
+      subtitle: 'Room reservations & advance booking pipeline',
       icon: 'calendar',
       screen: 'advance-booking',
       color: '#7C3AED',
     },
     {
       id: 'mod-checkin-checkout',
-      title: '2. Check-in / Check-out',
+      title: '3. Check-In & Check-Out',
       subtitle: 'Fast walk-in arrivals & checkout folio settlement',
       icon: 'log-in',
       screen: 'checkin-rooms',
       color: '#059669',
     },
     {
-      id: 'mod-rooms',
-      title: '3. Rooms Inventory',
-      subtitle: 'Live room status: Available, Cleaning, Maintenance',
-      icon: 'grid',
-      screen: 'rooms',
-      color: '#0284C7',
-    },
-    {
       id: 'mod-billing',
       title: '4. Billing & Cash Desk',
-      subtitle: 'Record guest payments (Cash, UPI, Card)',
+      subtitle: 'Record guest payments (Cash, UPI, Card) & invoices',
       icon: 'credit-card',
       screen: 'billing',
-      color: '#D97706',
+      color: '#16A34A',
     },
     {
       id: 'mod-attendance',
-      title: '5. Staff Daily Attendance',
-      subtitle: 'Mark daily checklist: Present, Half Day, Absent',
-      icon: 'clock',
+      title: '5. Staff Attendance',
+      subtitle: 'Mark daily roster: Present, Half Day, Absent',
+      icon: 'user-check',
       screen: 'attendance',
       color: '#2563EB',
     },
     {
+      id: 'mod-salary-advances',
+      title: '6. Salary Advances',
+      subtitle: 'Staff advance loan requests & approvals',
+      icon: 'dollar-sign',
+      screen: 'salary-advances',
+      color: '#0D9488',
+    },
+    {
       id: 'mod-expenses',
-      title: '6. Other Expenses',
-      subtitle: 'Record daily property expenses (Supplies, repairs)',
+      title: '7. Daily Expenses',
+      subtitle: 'Record daily property expenses (Supplies, repairs, bills)',
       icon: 'trending-down',
       screen: 'daily-expenses',
-      color: '#EA580C',
+      color: '#DC2626',
+    },
+    {
+      id: 'mod-reports',
+      title: '8. Daily Summary Report',
+      subtitle: 'Daily hotel occupancy, collections & room audit',
+      icon: 'bar-chart-2',
+      screen: 'daily-summary',
+      color: '#3B82F6',
     },
   ];
 

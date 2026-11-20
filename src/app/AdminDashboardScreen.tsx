@@ -158,7 +158,7 @@ export const AdminDashboardScreen: React.FC = () => {
       .slice(0, 5);
   }, [targetBookings]);
 
-  // 14 Admin Navigation Modules
+  // 11 Core Hotel Management Modules
   const adminModules: { id: string; title: string; subtitle: string; icon: IconName; screen: any; color: string }[] = [
     {
       id: 'mod-hotels',
@@ -169,104 +169,80 @@ export const AdminDashboardScreen: React.FC = () => {
       color: '#0F2942',
     },
     {
-      id: 'mod-users',
-      title: '2. User / Staff Management',
-      subtitle: 'Manage Managers, Staff & role access',
-      icon: 'users',
-      screen: 'staff',
-      color: '#1E3A8A',
-    },
-    {
       id: 'mod-rooms',
-      title: '3. Room Master & Inventory',
-      subtitle: 'Room configuration, pricing & amenities',
+      title: '2. Room Management',
+      subtitle: 'Room numbers, status & assignments (85 Rooms)',
       icon: 'grid',
       screen: 'rooms',
       color: '#0284C7',
     },
     {
       id: 'mod-advance-booking',
-      title: '4. Advance Booking',
-      subtitle: 'Manage normal & wedding event bookings',
+      title: '3. Advance Booking',
+      subtitle: 'Manage upcoming room reservations & advance pipeline',
       icon: 'calendar',
       screen: 'advance-booking',
       color: '#7C3AED',
     },
     {
       id: 'mod-checkin',
-      title: '5. Check-In & Check-Out',
-      subtitle: 'Front desk, walk-in & room status',
+      title: '4. Check-In & Check-Out',
+      subtitle: 'Front desk arrivals, walk-ins & room departures',
       icon: 'log-in',
       screen: 'checkin-rooms',
       color: '#059669',
     },
     {
       id: 'mod-billing',
-      title: '6. Billing & Folios',
+      title: '5. Billing & Folios',
       subtitle: 'Guest billing, invoices, GST & payments',
       icon: 'credit-card',
       screen: 'billing',
       color: '#16A34A',
     },
     {
+      id: 'mod-users',
+      title: '6. Staff Management',
+      subtitle: 'Manage Managers, Staff & role access',
+      icon: 'users',
+      screen: 'staff',
+      color: '#1E3A8A',
+    },
+    {
       id: 'mod-attendance',
       title: '7. Staff Attendance',
-      subtitle: 'Daily roster, biometric & check-in times',
+      subtitle: 'Daily roster, attendance & check-in times',
       icon: 'user-check',
-      screen: 'staff-attendance',
+      screen: 'attendance',
       color: '#D97706',
     },
     {
+      id: 'mod-salaries',
+      title: '8. Staff Salary & Advances',
+      subtitle: 'Salary advances, loans & monthly payroll records',
+      icon: 'dollar-sign',
+      screen: 'salary-advances',
+      color: '#0D9488',
+    },
+    {
       id: 'mod-expenses',
-      title: '8. Daily Expenses',
-      subtitle: 'Vendor bills, maintenance & petty cash',
+      title: '9. Daily Expenses',
+      subtitle: 'Vendor bills, maintenance & petty cash vouchers',
       icon: 'trending-down',
       screen: 'daily-expenses',
       color: '#DC2626',
     },
     {
-      id: 'mod-banquets',
-      title: '9. Banquets & Lawns',
-      subtitle: 'Wedding bookings, catering & venue status',
-      icon: 'calendar',
-      screen: 'banquets',
-      color: '#9333EA',
-    },
-    {
-      id: 'mod-dining',
-      title: '10. Restaurant & POS Dining',
-      subtitle: 'Table orders, KOT & 24/7 Room Service',
-      icon: 'receipt',
-      screen: 'dining',
-      color: '#EA580C',
-    },
-    {
-      id: 'mod-housekeeping',
-      title: '11. Housekeeping & Maintenance',
-      subtitle: 'Cleaning tickets, turn-down & work orders',
-      icon: 'activity',
-      screen: 'housekeeping',
-      color: '#0891B2',
-    },
-    {
-      id: 'mod-spa',
-      title: '12. Spa & Excursions',
-      subtitle: 'Ayurvedic treatments & concierge tours',
-      icon: 'shield',
-      screen: 'spa-excursions',
-      color: '#0D9488',
-    },
-    {
       id: 'mod-reports',
-      title: '13. Reports & Analytics',
-      subtitle: 'Consolidated revenue, RevPAR, ADR & audit',
+      title: '10. Daily Summary & Reports',
+      subtitle: 'Consolidated revenue, RevPAR, ADR & audit reports',
       icon: 'bar-chart-2',
-      screen: 'reports',
+      screen: 'daily-summary',
       color: '#3B82F6',
     },
     {
       id: 'mod-settings',
-      title: '14. Settings',
+      title: '11. Settings',
       subtitle: 'Owner profile, notifications & sign out',
       icon: 'settings',
       screen: 'settings',
@@ -593,12 +569,12 @@ export const AdminDashboardScreen: React.FC = () => {
           </View>
         </View>
 
-        {/* 14 ADMIN NAVIGATION MODULES */}
+        {/* CORE HOTEL MANAGEMENT MODULES */}
         <Text style={[styles.sectionHeader, { marginTop: spacing.xl }]}>
-          Admin Management Modules ({adminModules.length})
+          Hotel Management Modules ({adminModules.length})
         </Text>
         <Text style={styles.sectionSubtitle}>
-          Full operational control for front desk, inventory, billing, events, and staff
+          Complete operational oversight for rooms, reservations, front desk, billing, staff, and expenses
         </Text>
 
         <View style={styles.modulesGrid}>

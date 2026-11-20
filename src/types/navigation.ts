@@ -21,12 +21,6 @@ export type ScreenName =
   | 'daily-expenses'
   | 'daily-summary'
   | 'settings'
-  | 'banquets-events'
-  | 'in-room-dining'
-  | 'housekeeping-dispatch'
-  | 'ayurvedic-spa'
-  | 'concierge-dispatch'
-  | 'shift-handover'
   | 'cloud-sync';
 
 export type UserRole = 'admin' | 'manager';

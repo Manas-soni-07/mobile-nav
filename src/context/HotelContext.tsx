@@ -183,14 +183,6 @@ export const HotelProvider: React.FC<HotelProviderProps> = ({
         hotelService.fetchStaff(targetHotelId),
         hotelService.fetchFolios(targetHotelId),
         hotelService.fetchExpenses(targetHotelId),
-        hotelService.fetchBanquets(targetHotelId),
-        hotelService.fetchDiningOrders(targetHotelId),
-        hotelService.fetchHousekeepingTickets(targetHotelId),
-        hotelService.fetchSpaTreatments(),
-        hotelService.fetchSpaBookings(targetHotelId),
-        hotelService.fetchExcursions(),
-        hotelService.fetchConciergeBookings(targetHotelId),
-        hotelService.fetchShiftHandovers(targetHotelId),
       ]);
 
       if (results[0].status === 'fulfilled') setHotels(results[0].value);
@@ -199,14 +191,6 @@ export const HotelProvider: React.FC<HotelProviderProps> = ({
       if (results[3].status === 'fulfilled') setStaff(results[3].value);
       if (results[4].status === 'fulfilled') setFolios(results[4].value);
       if (results[5].status === 'fulfilled') setExpenses(results[5].value);
-      if (results[6].status === 'fulfilled') setBanquets(results[6].value);
-      if (results[7].status === 'fulfilled') setDiningOrders(results[7].value);
-      if (results[8].status === 'fulfilled') setHousekeepingTickets(results[8].value);
-      if (results[9].status === 'fulfilled') setSpaTreatments(results[9].value);
-      if (results[10].status === 'fulfilled') setSpaBookings(results[10].value);
-      if (results[11].status === 'fulfilled') setExcursions(results[11].value);
-      if (results[12].status === 'fulfilled') setConciergeBookings(results[12].value);
-      if (results[13].status === 'fulfilled') setShiftHandovers(results[13].value);
     } catch (err: any) {
       console.error('Failed to load database data:', err);
       setError(err.message || 'Error connecting to database');
