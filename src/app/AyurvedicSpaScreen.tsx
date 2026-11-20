@@ -116,7 +116,7 @@ export const AyurvedicSpaScreen: React.FC = () => {
   }, [spaTreatments, catalogCategory, searchQuery]);
 
   // Handle Book Session
-  const handleBookSession = () => {
+  const handleBookSession = async () => {
     if (!selectedRoomNumber) {
       Alert.alert('No Room Selected', 'Please select an occupied suite.');
       return;
@@ -129,7 +129,7 @@ export const AyurvedicSpaScreen: React.FC = () => {
     const targetRoom = occupiedRooms.find((r) => r.roomNumber === selectedRoomNumber);
     const guestName = targetRoom?.currentGuestName || 'Valued Guest';
 
-    const newBooking = createSpaBooking({
+    const newBooking = await createSpaBooking({
       hotelId: selectedHotel.id,
       roomNumber: selectedRoomNumber,
       guestName,

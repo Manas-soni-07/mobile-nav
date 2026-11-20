@@ -8,6 +8,7 @@ import {
   SafeAreaView,
   ActivityIndicator,
   Alert,
+  Platform,
 } from 'react-native';
 import { colors } from '../theme/colors';
 import { typography } from '../theme/typography';
@@ -37,14 +38,18 @@ export const CloudSyncScreen: React.FC = () => {
     status: 'SYNCHRONIZED',
     timestamp: new Date().toISOString(),
     counts: {
-      hotels: 3,
-      rooms: 12,
-      banquets: 3,
-      diningOrders: 2,
-      spaBookings: 2,
-      conciergeBookings: 2,
-      housekeepingTickets: 3,
-      shiftHandovers: 1,
+      hotels: 0,
+      rooms: 0,
+      bookings: 0,
+      staff: 0,
+      staffAdvances: 0,
+      expenses: 0,
+      banquets: 0,
+      diningOrders: 0,
+      spaBookings: 0,
+      conciergeBookings: 0,
+      housekeepingTickets: 0,
+      shiftHandovers: 0,
     },
   });
 
@@ -116,6 +121,18 @@ export const CloudSyncScreen: React.FC = () => {
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
+        {/* ACTIVE NETWORK CONFIG CARD */}
+        <View style={styles.networkCard}>
+          <View style={styles.networkHeader}>
+            <Icon name="activity" size={14} color={colors.accentBlue} />
+            <Text style={styles.networkTitle}>ACTIVE BACKEND NETWORK CHANNEL</Text>
+          </View>
+          <Text style={styles.networkEndpoint}>{cloudSyncService.getBaseUrl()}</Text>
+          <Text style={styles.networkSub}>
+            Physical Device • Wi-Fi LAN IP (192.168.0.104:5000)
+          </Text>
+        </View>
+
         {/* CLUSTER STATUS CARD */}
         <View style={styles.clusterCard}>
           <View style={styles.clusterHeader}>
@@ -365,5 +382,35 @@ const styles = StyleSheet.create({
     flex: 1,
     textAlign: 'right',
     marginLeft: 6,
+  },
+  networkCard: {
+    backgroundColor: '#EFF6FF',
+    borderWidth: 1,
+    borderColor: '#BFDBFE',
+    borderRadius: borderRadius.lg,
+    padding: spacing.md,
+    marginBottom: spacing.md,
+  },
+  networkHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 4,
+  },
+  networkTitle: {
+    ...typography.overline,
+    color: colors.accentBlue,
+    fontWeight: '700',
+  },
+  networkEndpoint: {
+    ...typography.subtitle2,
+    color: colors.primaryNavy,
+    fontWeight: '700',
+    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+  },
+  networkSub: {
+    ...typography.caption,
+    color: colors.textSecondary,
+    marginTop: 2,
   },
 });

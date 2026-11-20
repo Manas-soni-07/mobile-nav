@@ -11,6 +11,7 @@ const apiRoutes = require('./routes/api');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
+const HOST = process.env.HOST || '0.0.0.0';
 
 app.use(cors());
 app.use(express.json());
@@ -40,10 +41,12 @@ app.get('/', (req, res) => {
 });
 
 if (require.main === module) {
-  app.listen(PORT, () => {
+  app.listen(PORT, HOST, () => {
     console.log(`=======================================================`);
-    console.log(`ResortOS TiDB Cloud API Server listening on port ${PORT}`);
-    console.log(`Health Check: http://localhost:${PORT}/api/health`);
+    console.log(`🚀 ResortOS TiDB Cloud API Server listening on port ${PORT}`);
+    console.log(`📡 Bound Interface:  ${HOST} (Available across Wi-Fi LAN)`);
+    console.log(`💻 Local Host:       http://localhost:${PORT}/api/health`);
+    console.log(`📱 Android Phone:    http://192.168.0.104:${PORT}/api/health`);
     console.log(`=======================================================`);
   });
 }

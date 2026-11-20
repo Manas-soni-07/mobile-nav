@@ -3,7 +3,7 @@
  * Directory of employees, designations, monthly salaries in INR, and hotel assignments.
  */
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -15,6 +15,7 @@ import {
   Alert,
   KeyboardAvoidingView,
   Platform,
+  ActivityIndicator,
 } from 'react-native';
 import { colors } from '../theme/colors';
 import { typography } from '../theme/typography';
@@ -29,118 +30,15 @@ import { Input } from '../components/common/Input';
 import { Button } from '../components/common/Button';
 import { StaffMember } from '../types/hotel';
 import { formatCurrency } from '../utils/formatters';
+import { apiClient } from '../services/apiClient';
 
 export const StaffManagementScreen: React.FC = () => {
   const { goBack } = useNavigation();
   const { hotels } = useHotel();
 
-  // Initial staff seed
-  const [staffList, setStaffList] = useState<StaffMember[]>([
-    {
-      id: 'stf-v-1',
-      hotelId: 'h-villa',
-      employeeCode: 'EMP-TV-01',
-      fullName: 'Manoj Kumar',
-      role: 'Receptionist',
-      department: 'Front Desk',
-      shift: 'Morning',
-      status: 'present',
-      phone: '+91 98291 00111',
-      monthlySalary: 18000,
-      joinDate: '2025-01-15',
-    },
-    {
-      id: 'stf-v-2',
-      hotelId: 'h-villa',
-      employeeCode: 'EMP-TV-02',
-      fullName: 'Ramesh Meena',
-      role: 'Housekeeping Lead',
-      department: 'Housekeeping',
-      shift: 'Morning',
-      status: 'present',
-      phone: '+91 98291 00112',
-      monthlySalary: 15000,
-      joinDate: '2025-03-01',
-    },
-    {
-      id: 'stf-v-3',
-      hotelId: 'h-villa',
-      employeeCode: 'EMP-TV-03',
-      fullName: 'Sohan Lal',
-      role: 'Security Guard',
-      department: 'Security',
-      shift: 'Night',
-      status: 'present',
-      phone: '+91 98291 00113',
-      monthlySalary: 14000,
-      joinDate: '2025-02-10',
-    },
-    {
-      id: 'stf-v-4',
-      hotelId: 'h-villa',
-      employeeCode: 'EMP-TV-04',
-      fullName: 'Gopal Sharma',
-      role: 'Maintenance Electrician',
-      department: 'Maintenance',
-      shift: 'Full Day',
-      status: 'present',
-      phone: '+91 98291 00114',
-      monthlySalary: 16000,
-      joinDate: '2025-04-01',
-    },
-    {
-      id: 'stf-n-1',
-      hotelId: 'h-navkar',
-      employeeCode: 'EMP-NP-01',
-      fullName: 'Bhupendra Singh',
-      role: 'Front Office Executive',
-      department: 'Front Desk',
-      shift: 'Morning',
-      status: 'present',
-      phone: '+91 98292 00221',
-      monthlySalary: 20000,
-      joinDate: '2025-01-01',
-    },
-    {
-      id: 'stf-n-2',
-      hotelId: 'h-navkar',
-      employeeCode: 'EMP-NP-02',
-      fullName: 'Kamla Devi',
-      role: 'Housekeeping Incharge',
-      department: 'Housekeeping',
-      shift: 'Morning',
-      status: 'present',
-      phone: '+91 98292 00222',
-      monthlySalary: 16000,
-      joinDate: '2025-02-15',
-    },
-    {
-      id: 'stf-n-3',
-      hotelId: 'h-navkar',
-      employeeCode: 'EMP-NP-03',
-      fullName: 'Pappu Rawat',
-      role: 'Night Security',
-      department: 'Security',
-      shift: 'Night',
-      status: 'present',
-      phone: '+91 98292 00223',
-      monthlySalary: 14000,
-      joinDate: '2025-03-20',
-    },
-    {
-      id: 'stf-n-4',
-      hotelId: 'h-navkar',
-      employeeCode: 'EMP-NP-04',
-      fullName: 'Dinesh Soni',
-      role: 'Plumber & Maintenance',
-      department: 'Maintenance',
-      shift: 'Full Day',
-      status: 'present',
-      phone: '+91 98292 00224',
-      monthlySalary: 16500,
-      joinDate: '2025-05-01',
-    },
-  ]);
+  const [staffList, setStaffList] = useState<StaffMember[]>([]);
+  const [loading, setLoading] = useState<boolean>(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   const [selectedFilterHotel, setSelectedFilterHotel] = useState<string>('all');
   const [modalVisible, setModalVisible] = useState(false);
@@ -153,6 +51,23 @@ export const StaffManagementScreen: React.FC = () => {
   const [monthlySalary, setMonthlySalary] = useState('18000');
   const [targetHotelId, setTargetHotelId] = useState('h-villa');
   const [joinDate, setJoinDate] = useState('2025-01-01');
+
+  const fetchStaff = useCallback(async () => {
+    setLoading(true);
+    setLoadError(null);
+    try {
+      const data = await apiClient.getStaff();
+      setStaffList(data);
+    } catch (err: any) {
+      setLoadError(err.message || 'Failed to load staff records from database');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchStaff();
+  }, [fetchStaff]);
 
   const filteredStaff = useMemo(() => {
     if (selectedFilterHotel === 'all') return staffList;
@@ -181,7 +96,7 @@ export const StaffManagementScreen: React.FC = () => {
     setModalVisible(true);
   };
 
-  const handleSaveStaff = () => {
+  const handleSaveStaff = async () => {
     if (!fullName.trim() || !role.trim()) {
       Alert.alert('Required Fields', 'Please enter staff full name and role');
       return;
@@ -189,40 +104,33 @@ export const StaffManagementScreen: React.FC = () => {
 
     const salary = parseFloat(monthlySalary) || 15000;
 
-    if (editingStaff) {
-      setStaffList((prev) =>
-        prev.map((s) =>
-          s.id === editingStaff.id
-            ? {
-                ...s,
-                fullName,
-                phone,
-                role,
-                monthlySalary: salary,
-                hotelId: targetHotelId,
-                joinDate,
-              }
-            : s
-        )
-      );
-    } else {
-      const newStaff: StaffMember = {
-        id: `stf-${Date.now()}`,
-        hotelId: targetHotelId,
-        employeeCode: `EMP-${Date.now().toString().slice(-4)}`,
-        fullName,
-        phone,
-        role,
-        department: 'Front Desk',
-        shift: 'Morning',
-        status: 'present',
-        monthlySalary: salary,
-        joinDate,
-      };
-      setStaffList((prev) => [...prev, newStaff]);
+    try {
+      if (editingStaff) {
+        await apiClient.updateStaff(editingStaff.id, {
+          fullName,
+          phone,
+          role,
+          monthlySalary: salary,
+        });
+        Alert.alert('Success', 'Staff details updated in database');
+      } else {
+        await apiClient.createStaff({
+          hotelId: targetHotelId,
+          fullName,
+          phone,
+          role,
+          department: 'Front Desk',
+          shift: 'Morning',
+          monthlySalary: salary,
+          joinDate,
+        });
+        Alert.alert('Success', 'Staff member enrolled in database');
+      }
+      setModalVisible(false);
+      await fetchStaff();
+    } catch (err: any) {
+      Alert.alert('Save Error', err.message || 'Failed to persist staff changes');
     }
-
-    setModalVisible(false);
   };
 
   const getHotelName = (hId: string) => {
@@ -280,49 +188,66 @@ export const StaffManagementScreen: React.FC = () => {
         </View>
 
         {/* Staff Cards List */}
-        {filteredStaff.map((staff) => (
-          <Card key={staff.id} padding="lg" variant="elevated" style={styles.staffCard}>
-            <View style={styles.cardHeader}>
-              <View style={styles.avatar}>
-                <Icon name="user" size={22} color={colors.primaryNavy} />
+        {loading ? (
+          <View style={styles.centerBox}>
+            <ActivityIndicator size="large" color={colors.primaryNavy} />
+            <Text style={styles.loadingText}>Loading staff records from database...</Text>
+          </View>
+        ) : loadError ? (
+          <View style={styles.errorBox}>
+            <Icon name="alert-circle" size={32} color={colors.error} />
+            <Text style={styles.errorText}>{loadError}</Text>
+            <Button title="Retry" size="sm" variant="outline" onPress={fetchStaff} style={{ marginTop: 8 }} />
+          </View>
+        ) : filteredStaff.length === 0 ? (
+          <View style={styles.emptyBox}>
+            <Text style={styles.emptyText}>No staff records found in database.</Text>
+          </View>
+        ) : (
+          filteredStaff.map((staff) => (
+            <Card key={staff.id} padding="lg" variant="elevated" style={styles.staffCard}>
+              <View style={styles.cardHeader}>
+                <View style={styles.avatar}>
+                  <Icon name="user" size={22} color={colors.primaryNavy} />
+                </View>
+                <View style={styles.nameBlock}>
+                  <Text style={styles.staffName}>{staff.fullName}</Text>
+                  <Text style={styles.staffRole}>{staff.role} • {staff.employeeCode}</Text>
+                </View>
+                <Badge
+                  label={getHotelName(staff.hotelId)}
+                  variant="primary"
+                  size="sm"
+                />
               </View>
-              <View style={styles.nameBlock}>
-                <Text style={styles.staffName}>{staff.fullName}</Text>
-                <Text style={styles.staffRole}>{staff.role} • {staff.employeeCode}</Text>
-              </View>
-              <Badge
-                label={getHotelName(staff.hotelId)}
-                variant="primary"
-                size="sm"
-              />
-            </View>
 
-            <View style={styles.infoGrid}>
-              <View style={styles.infoRow}>
-                <Text style={styles.infoLabel}>Monthly Salary:</Text>
-                <Text style={styles.salaryText}>{formatCurrency(staff.monthlySalary || 0)} / month</Text>
+              <View style={styles.infoGrid}>
+                <View style={styles.infoRow}>
+                  <Text style={styles.infoLabel}>Monthly Salary:</Text>
+                  <Text style={styles.salaryText}>{formatCurrency(staff.monthlySalary || 0)} / month</Text>
+                </View>
+                <View style={styles.infoRow}>
+                  <Text style={styles.infoLabel}>Mobile:</Text>
+                  <Text style={styles.infoValue}>{staff.phone}</Text>
+                </View>
+                <View style={styles.infoRow}>
+                  <Text style={styles.infoLabel}>Joining Date:</Text>
+                  <Text style={styles.infoValue}>{staff.joinDate || 'N/A'}</Text>
+                </View>
               </View>
-              <View style={styles.infoRow}>
-                <Text style={styles.infoLabel}>Mobile:</Text>
-                <Text style={styles.infoValue}>{staff.phone}</Text>
-              </View>
-              <View style={styles.infoRow}>
-                <Text style={styles.infoLabel}>Joining Date:</Text>
-                <Text style={styles.infoValue}>{staff.joinDate || 'N/A'}</Text>
-              </View>
-            </View>
 
-            <View style={styles.actionsRow}>
-              <TouchableOpacity
-                style={styles.editBtn}
-                onPress={() => openEditModal(staff)}
-              >
-                <Icon name="edit" size={14} color={colors.primaryNavy} />
-                <Text style={styles.editBtnText}>Edit Profile & Salary</Text>
-              </TouchableOpacity>
-            </View>
-          </Card>
-        ))}
+              <View style={styles.actionsRow}>
+                <TouchableOpacity
+                  style={styles.editBtn}
+                  onPress={() => openEditModal(staff)}
+                >
+                  <Icon name="edit" size={14} color={colors.primaryNavy} />
+                  <Text style={styles.editBtnText}>Edit Profile & Salary</Text>
+                </TouchableOpacity>
+              </View>
+            </Card>
+          ))
+        )}
       </ScrollView>
 
       {/* Add / Edit Staff Modal */}
@@ -598,6 +523,39 @@ const styles = StyleSheet.create({
   modalSaveBtn: {
     marginTop: spacing.md,
     marginBottom: spacing.md,
+  },
+  centerBox: {
+    padding: spacing.xl,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  loadingText: {
+    ...typography.caption,
+    color: colors.textSecondary,
+    marginTop: spacing.sm,
+  },
+  errorBox: {
+    padding: spacing.lg,
+    alignItems: 'center',
+    backgroundColor: '#FEF2F2',
+    borderRadius: borderRadius.md,
+    borderWidth: 1,
+    borderColor: '#FECACA',
+    marginVertical: spacing.md,
+  },
+  errorText: {
+    ...typography.caption,
+    color: colors.error,
+    textAlign: 'center',
+    marginTop: spacing.xs,
+  },
+  emptyBox: {
+    padding: spacing.xl,
+    alignItems: 'center',
+  },
+  emptyText: {
+    ...typography.caption,
+    color: colors.textMuted,
   },
 });
 

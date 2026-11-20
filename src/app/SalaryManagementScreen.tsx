@@ -3,7 +3,7 @@
  * Attendance-based monthly salary calculations with automated advance deductions.
  */
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
@@ -12,6 +12,7 @@ import {
   SafeAreaView,
   TouchableOpacity,
   Alert,
+  ActivityIndicator,
 } from 'react-native';
 import { colors } from '../theme/colors';
 import { typography } from '../theme/typography';
@@ -24,6 +25,7 @@ import { Badge } from '../components/common/Badge';
 import { Icon } from '../components/common/Icon';
 import { Button } from '../components/common/Button';
 import { formatCurrency } from '../utils/formatters';
+import { apiClient } from '../services/apiClient';
 
 interface StaffSalaryRow {
   id: string;
@@ -46,70 +48,26 @@ export const SalaryManagementScreen: React.FC = () => {
 
   const [selectedMonth, setSelectedMonth] = useState('November 2026');
   const [filterHotel, setFilterHotel] = useState<'all' | 'h-villa' | 'h-navkar'>('all');
+  const [payrollRows, setPayrollRows] = useState<StaffSalaryRow[]>([]);
+  const [loading, setLoading] = useState<boolean>(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
-  // Computed salary payroll items
-  const [payrollRows, setPayrollRows] = useState<StaffSalaryRow[]>([
-    {
-      id: 'sal-1',
-      staffId: 'stf-v-1',
-      staffName: 'Manoj Kumar',
-      role: 'Receptionist',
-      hotelId: 'h-villa',
-      hotelName: 'THE VILLA',
-      baseSalary: 18000,
-      totalDays: 30,
-      presentDays: 28,
-      halfDays: 1,
-      absentDays: 1,
-      advanceDeductions: 3000, // Taken in Nov
-      status: 'PENDING',
-    },
-    {
-      id: 'sal-2',
-      staffId: 'stf-v-2',
-      staffName: 'Ramesh Meena',
-      role: 'Housekeeping Lead',
-      hotelId: 'h-villa',
-      hotelName: 'THE VILLA',
-      baseSalary: 15000,
-      totalDays: 30,
-      presentDays: 29,
-      halfDays: 0,
-      absentDays: 1,
-      advanceDeductions: 0,
-      status: 'PENDING',
-    },
-    {
-      id: 'sal-3',
-      staffId: 'stf-n-1',
-      staffName: 'Bhupendra Singh',
-      role: 'Front Office Executive',
-      hotelId: 'h-navkar',
-      hotelName: 'NAVKAR PALACE & RESORT',
-      baseSalary: 20000,
-      totalDays: 30,
-      presentDays: 30,
-      halfDays: 0,
-      absentDays: 0,
-      advanceDeductions: 0,
-      status: 'PAID',
-    },
-    {
-      id: 'sal-4',
-      staffId: 'stf-n-2',
-      staffName: 'Kamla Devi',
-      role: 'Housekeeping Incharge',
-      hotelId: 'h-navkar',
-      hotelName: 'NAVKAR PALACE & RESORT',
-      baseSalary: 16000,
-      totalDays: 30,
-      presentDays: 27,
-      halfDays: 2,
-      absentDays: 1,
-      advanceDeductions: 0,
-      status: 'PENDING',
-    },
-  ]);
+  const fetchSalaries = useCallback(async () => {
+    setLoading(true);
+    setLoadError(null);
+    try {
+      const data = await apiClient.getSalaries(filterHotel);
+      setPayrollRows(data);
+    } catch (err: any) {
+      setLoadError(err.message || 'Failed to load live payroll records from database');
+    } finally {
+      setLoading(false);
+    }
+  }, [filterHotel]);
+
+  useEffect(() => {
+    fetchSalaries();
+  }, [fetchSalaries]);
 
   const filteredPayroll = useMemo(() => {
     if (filterHotel === 'all') return payrollRows;
@@ -134,7 +92,7 @@ export const SalaryManagementScreen: React.FC = () => {
     return { grossTotal, advanceTotal, netTotal };
   }, [filteredPayroll]);
 
-  const handleMarkAsPaid = (id: string, staffName: string, netAmount: number) => {
+  const handleMarkAsPaid = (staffId: string, staffName: string, netAmount: number, hotelId: string) => {
     Alert.alert(
       'Confirm Salary Payment',
       `Mark salary of ${formatCurrency(netAmount)} as PAID for ${staffName}?`,
@@ -142,10 +100,19 @@ export const SalaryManagementScreen: React.FC = () => {
         { text: 'Cancel', style: 'cancel' },
         {
           text: 'Confirm & Mark Paid',
-          onPress: () => {
-            setPayrollRows((prev) =>
-              prev.map((r) => (r.id === id ? { ...r, status: 'PAID' } : r))
-            );
+          onPress: async () => {
+            try {
+              await apiClient.paySalary({
+                staffId,
+                hotelId,
+                netAmount,
+                month: 11,
+                year: 2026,
+              });
+              await fetchSalaries();
+            } catch (err: any) {
+              Alert.alert('Payment Error', err.message || 'Failed to persist salary payment to database');
+            }
           },
         },
       ]
@@ -236,89 +203,106 @@ export const SalaryManagementScreen: React.FC = () => {
         {/* Payroll Staff List */}
         <Text style={styles.sectionHeader}>Staff Monthly Slips ({filteredPayroll.length})</Text>
 
-        {filteredPayroll.map((row) => {
-          const payableDays = row.presentDays + row.halfDays * 0.5;
-          const grossSalary = Math.round((row.baseSalary / row.totalDays) * payableDays);
-          const netSalary = Math.max(0, grossSalary - row.advanceDeductions);
-          const isPaid = row.status === 'PAID';
+        {loading ? (
+          <View style={styles.centerBox}>
+            <ActivityIndicator size="large" color={colors.primaryNavy} />
+            <Text style={styles.loadingText}>Loading payroll records from database...</Text>
+          </View>
+        ) : loadError ? (
+          <View style={styles.errorBox}>
+            <Icon name="alert-circle" size={32} color={colors.error} />
+            <Text style={styles.errorText}>{loadError}</Text>
+            <Button title="Retry" size="sm" variant="outline" onPress={fetchSalaries} style={{ marginTop: 8 }} />
+          </View>
+        ) : filteredPayroll.length === 0 ? (
+          <View style={styles.emptyBox}>
+            <Text style={styles.emptyText}>No salary records found for this hotel/period.</Text>
+          </View>
+        ) : (
+          filteredPayroll.map((row) => {
+            const payableDays = row.presentDays + row.halfDays * 0.5;
+            const grossSalary = Math.round((row.baseSalary / row.totalDays) * payableDays);
+            const netSalary = Math.max(0, grossSalary - row.advanceDeductions);
+            const isPaid = row.status === 'PAID';
 
-          return (
-            <Card key={row.id} padding="lg" variant="elevated" style={styles.payrollCard}>
-              <View style={styles.cardHeader}>
-                <View style={styles.staffBlock}>
-                  <Text style={styles.staffName}>{row.staffName}</Text>
-                  <Text style={styles.roleSub}>{row.role} • {row.hotelName}</Text>
-                </View>
-                <Badge
-                  label={isPaid ? 'PAID' : 'PENDING'}
-                  variant={isPaid ? 'success' : 'warning'}
-                  size="sm"
-                />
-              </View>
-
-              {/* Attendance Breakdown */}
-              <View style={styles.attendanceBar}>
-                <Text style={styles.attItem}>
-                  Present: <Text style={styles.attBold}>{row.presentDays}d</Text>
-                </Text>
-                <Text style={styles.attItem}>
-                  Half Day: <Text style={styles.attBold}>{row.halfDays}d</Text>
-                </Text>
-                <Text style={styles.attItem}>
-                  Absent: <Text style={styles.attBold}>{row.absentDays}d</Text>
-                </Text>
-                <Text style={styles.attItem}>
-                  Payable: <Text style={[styles.attBold, { color: colors.primaryNavy }]}>{payableDays}d</Text>
-                </Text>
-              </View>
-
-              {/* Calculation Line Items */}
-              <View style={styles.calcBox}>
-                <View style={styles.calcRow}>
-                  <Text style={styles.calcLabel}>Base Monthly Salary:</Text>
-                  <Text style={styles.calcVal}>{formatCurrency(row.baseSalary)}</Text>
+            return (
+              <Card key={row.id} padding="lg" variant="elevated" style={styles.payrollCard}>
+                <View style={styles.cardHeader}>
+                  <View style={styles.staffBlock}>
+                    <Text style={styles.staffName}>{row.staffName}</Text>
+                    <Text style={styles.roleSub}>{row.role} • {row.hotelName}</Text>
+                  </View>
+                  <Badge
+                    label={isPaid ? 'PAID' : 'PENDING'}
+                    variant={isPaid ? 'success' : 'warning'}
+                    size="sm"
+                  />
                 </View>
 
-                <View style={styles.calcRow}>
-                  <Text style={styles.calcLabel}>Gross Earned ({payableDays}/30 days):</Text>
-                  <Text style={styles.calcVal}>{formatCurrency(grossSalary)}</Text>
+                {/* Attendance Breakdown */}
+                <View style={styles.attendanceBar}>
+                  <Text style={styles.attItem}>
+                    Present: <Text style={styles.attBold}>{row.presentDays}d</Text>
+                  </Text>
+                  <Text style={styles.attItem}>
+                    Half Day: <Text style={styles.attBold}>{row.halfDays}d</Text>
+                  </Text>
+                  <Text style={styles.attItem}>
+                    Absent: <Text style={styles.attBold}>{row.absentDays}d</Text>
+                  </Text>
+                  <Text style={styles.attItem}>
+                    Payable: <Text style={[styles.attBold, { color: colors.primaryNavy }]}>{payableDays}d</Text>
+                  </Text>
                 </View>
 
-                {row.advanceDeductions > 0 && (
+                {/* Calculation Line Items */}
+                <View style={styles.calcBox}>
                   <View style={styles.calcRow}>
-                    <Text style={[styles.calcLabel, { color: colors.error }]}>
-                      Salary Advance Deduction:
-                    </Text>
-                    <Text style={[styles.calcVal, { color: colors.error }]}>
-                      − {formatCurrency(row.advanceDeductions)}
-                    </Text>
+                    <Text style={styles.calcLabel}>Base Monthly Salary:</Text>
+                    <Text style={styles.calcVal}>{formatCurrency(row.baseSalary)}</Text>
+                  </View>
+
+                  <View style={styles.calcRow}>
+                    <Text style={styles.calcLabel}>Gross Earned ({payableDays}/30 days):</Text>
+                    <Text style={styles.calcVal}>{formatCurrency(grossSalary)}</Text>
+                  </View>
+
+                  {row.advanceDeductions > 0 && (
+                    <View style={styles.calcRow}>
+                      <Text style={[styles.calcLabel, { color: colors.error }]}>
+                        Salary Advance Deduction:
+                      </Text>
+                      <Text style={[styles.calcVal, { color: colors.error }]}>
+                        − {formatCurrency(row.advanceDeductions)}
+                      </Text>
+                    </View>
+                  )}
+
+                  <View style={[styles.calcRow, styles.netRow]}>
+                    <Text style={styles.netLabel}>Net Payable Salary:</Text>
+                    <Text style={styles.netValue}>{formatCurrency(netSalary)}</Text>
+                  </View>
+                </View>
+
+                {/* Action Button */}
+                {!isPaid ? (
+                  <Button
+                    title={`Mark ${formatCurrency(netSalary)} as Paid`}
+                    size="sm"
+                    variant="primary"
+                    onPress={() => handleMarkAsPaid(row.staffId, row.staffName, netSalary, row.hotelId)}
+                    style={styles.payBtn}
+                  />
+                ) : (
+                  <View style={styles.paidBadgeBox}>
+                    <Icon name="check" size={14} color="#047857" />
+                    <Text style={styles.paidBadgeText}>Salary Disbursed</Text>
                   </View>
                 )}
-
-                <View style={[styles.calcRow, styles.netRow]}>
-                  <Text style={styles.netLabel}>Net Payable Salary:</Text>
-                  <Text style={styles.netValue}>{formatCurrency(netSalary)}</Text>
-                </View>
-              </View>
-
-              {/* Action Button */}
-              {!isPaid ? (
-                <Button
-                  title={`Mark ${formatCurrency(netSalary)} as Paid`}
-                  size="sm"
-                  variant="primary"
-                  onPress={() => handleMarkAsPaid(row.id, row.staffName, netSalary)}
-                  style={styles.payBtn}
-                />
-              ) : (
-                <View style={styles.paidBadgeBox}>
-                  <Icon name="check" size={14} color="#047857" />
-                  <Text style={styles.paidBadgeText}>Salary Disbursed</Text>
-                </View>
-              )}
-            </Card>
-          );
-        })}
+              </Card>
+            );
+          })
+        )}
       </ScrollView>
     </SafeAreaView>
   );
@@ -510,6 +494,39 @@ const styles = StyleSheet.create({
     color: '#047857',
     fontWeight: '700',
     marginLeft: 4,
+  },
+  centerBox: {
+    padding: spacing.xl,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  loadingText: {
+    ...typography.caption,
+    color: colors.textSecondary,
+    marginTop: spacing.sm,
+  },
+  errorBox: {
+    padding: spacing.lg,
+    alignItems: 'center',
+    backgroundColor: '#FEF2F2',
+    borderRadius: borderRadius.md,
+    borderWidth: 1,
+    borderColor: '#FECACA',
+    marginVertical: spacing.md,
+  },
+  errorText: {
+    ...typography.caption,
+    color: colors.error,
+    textAlign: 'center',
+    marginTop: spacing.xs,
+  },
+  emptyBox: {
+    padding: spacing.xl,
+    alignItems: 'center',
+  },
+  emptyText: {
+    ...typography.caption,
+    color: colors.textMuted,
   },
 });
 

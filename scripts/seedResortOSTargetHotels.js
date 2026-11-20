@@ -155,22 +155,45 @@ async function seedResortOS() {
 
   console.log("✓ Users seeded with role-based hotel binding.");
 
-  // 3. SEED ROOMS FOR BOTH PROPERTIES
-  console.log("\n[3/5] Seeding Rooms for THE VILLA and NAVKAR PALACE...");
+  // 3. SEED ROOMS FOR BOTH PROPERTIES (EXACTLY 15 FOR THE VILLA, 70 FOR NAVKAR PALACE)
+  console.log("\n[3/5] Seeding Rooms: 15 for THE VILLA and 70 for NAVKAR PALACE...");
   await conn.query(`DELETE FROM rooms WHERE hotelId IN ('h-villa', 'h-navkar')`);
 
-  const villaRooms = [
-    ['rm-v-101', 'h-villa', '101', 1, 'DELUXE', 'Deluxe Room', 2500.00, 2500.00, 'OCCUPIED', 'clean', 2],
-    ['rm-v-102', 'h-villa', '102', 1, 'DELUXE', 'Deluxe Room', 2500.00, 2500.00, 'AVAILABLE', 'clean', 2],
-    ['rm-v-103', 'h-villa', '103', 1, 'DELUXE', 'Deluxe Room', 2500.00, 2500.00, 'CLEANING', 'dirty', 2],
-    ['rm-v-104', 'h-villa', '104', 1, 'DELUXE', 'Super Deluxe Room', 3500.00, 3500.00, 'AVAILABLE', 'clean', 3],
-    ['rm-v-105', 'h-villa', '105', 1, 'DELUXE', 'Super Deluxe Room', 3500.00, 3500.00, 'AVAILABLE', 'clean', 3],
-    ['rm-v-201', 'h-villa', '201', 2, 'EXECUTIVE_SUITE', 'Executive Suite', 4500.00, 4500.00, 'OCCUPIED', 'clean', 4],
-    ['rm-v-202', 'h-villa', '202', 2, 'EXECUTIVE_SUITE', 'Executive Suite', 4500.00, 4500.00, 'AVAILABLE', 'clean', 4],
-    ['rm-v-203', 'h-villa', '203', 2, 'VILLA', 'Family Suite', 5500.00, 5500.00, 'MAINTENANCE', 'dirty', 6],
-    ['rm-v-204', 'h-villa', '204', 2, 'VILLA', 'Family Suite', 5500.00, 5500.00, 'AVAILABLE', 'clean', 6],
-    ['rm-v-205', 'h-villa', '205', 2, 'STANDARD', 'Standard Room', 1800.00, 1800.00, 'AVAILABLE', 'clean', 2],
-  ];
+  // Generate 15 rooms for The Villa (rm-v-101 to rm-v-115)
+  const villaRooms = [];
+  for (let i = 1; i <= 15; i++) {
+    const num = (100 + i).toString();
+    const floor = i <= 8 ? 1 : 2;
+    let category = 'Deluxe Room';
+    let type = 'DELUXE';
+    let price = 2500.00;
+    let status = 'AVAILABLE';
+    let hk = 'clean';
+
+    if (i <= 5) {
+      category = 'Deluxe Room';
+      price = 2500.00;
+      type = 'DELUXE';
+    } else if (i <= 9) {
+      category = 'Super Deluxe Room';
+      price = 3500.00;
+      type = 'SUPER_DELUXE';
+    } else if (i <= 12) {
+      category = 'Executive Suite';
+      price = 4800.00;
+      type = 'EXECUTIVE_SUITE';
+    } else {
+      category = 'Family Suite';
+      price = 6000.00;
+      type = 'VILLA';
+    }
+
+    if (i === 1 || i === 2 || i === 6 || i === 10) status = 'OCCUPIED';
+    else if (i === 4) { status = 'CLEANING'; hk = 'dirty'; }
+    else if (i === 13) { status = 'MAINTENANCE'; hk = 'dirty'; }
+
+    villaRooms.push([`rm-v-${num}`, 'h-villa', num, floor, type, category, price, price, status, hk, 2]);
+  }
 
   for (const r of villaRooms) {
     await conn.query(`
@@ -179,18 +202,48 @@ async function seedResortOS() {
     `, r);
   }
 
-  const navkarRooms = [
-    ['rm-n-101', 'h-navkar', '101', 1, 'DELUXE', 'Deluxe AC Room', 2800.00, 2800.00, 'OCCUPIED', 'clean', 2],
-    ['rm-n-102', 'h-navkar', '102', 1, 'DELUXE', 'Deluxe AC Room', 2800.00, 2800.00, 'AVAILABLE', 'clean', 2],
-    ['rm-n-103', 'h-navkar', '103', 1, 'DELUXE', 'Deluxe AC Room', 2800.00, 2800.00, 'AVAILABLE', 'clean', 2],
-    ['rm-n-104', 'h-navkar', '104', 1, 'DELUXE', 'Super Deluxe Room', 3800.00, 3800.00, 'CLEANING', 'dirty', 3],
-    ['rm-n-105', 'h-navkar', '105', 1, 'DELUXE', 'Super Deluxe Room', 3800.00, 3800.00, 'AVAILABLE', 'clean', 3],
-    ['rm-n-201', 'h-navkar', '201', 2, 'EXECUTIVE_SUITE', 'Palace Suite', 5000.00, 5000.00, 'OCCUPIED', 'clean', 4],
-    ['rm-n-202', 'h-navkar', '202', 2, 'EXECUTIVE_SUITE', 'Palace Suite', 5000.00, 5000.00, 'AVAILABLE', 'clean', 4],
-    ['rm-n-203', 'h-navkar', '203', 2, 'VILLA', 'Royal Family Villa', 6500.00, 6500.00, 'AVAILABLE', 'clean', 6],
-    ['rm-n-204', 'h-navkar', '204', 2, 'VILLA', 'Royal Family Villa', 6500.00, 6500.00, 'MAINTENANCE', 'dirty', 6],
-    ['rm-n-205', 'h-navkar', '205', 2, 'STANDARD', 'Standard Non-AC Room', 1600.00, 1600.00, 'AVAILABLE', 'clean', 2],
-  ];
+  // Generate 70 rooms for Navkar Palace & Resort (rm-n-101 to rm-n-170)
+  const navkarRooms = [];
+  for (let i = 1; i <= 70; i++) {
+    const num = (100 + i).toString();
+    const floor = i <= 25 ? 1 : i <= 50 ? 2 : 3;
+    let category = 'Deluxe AC Room';
+    let type = 'DELUXE';
+    let price = 2800.00;
+    let status = 'AVAILABLE';
+    let hk = 'clean';
+
+    if (i <= 25) {
+      category = 'Deluxe AC Room';
+      price = 2800.00;
+      type = 'DELUXE';
+    } else if (i <= 45) {
+      category = 'Super Deluxe Room';
+      price = 3800.00;
+      type = 'SUPER_DELUXE';
+    } else if (i <= 60) {
+      category = 'Palace Suite';
+      price = 5500.00;
+      type = 'EXECUTIVE_SUITE';
+    } else {
+      category = 'Royal Family Villa';
+      price = 7500.00;
+      type = 'VILLA';
+    }
+
+    // 22 occupied, 3 cleaning, 1 maintenance, 44 available (Total: 70)
+    if ([1, 2, 3, 5, 6, 8, 9, 11, 14, 16, 18, 21, 24, 27, 30, 33, 36, 40, 45, 50, 55, 62].includes(i)) {
+      status = 'OCCUPIED';
+    } else if ([4, 15, 29].includes(i)) {
+      status = 'CLEANING';
+      hk = 'dirty';
+    } else if (i === 19) {
+      status = 'MAINTENANCE';
+      hk = 'dirty';
+    }
+
+    navkarRooms.push([`rm-n-${num}`, 'h-navkar', num, floor, type, category, price, price, status, hk, 2]);
+  }
 
   for (const r of navkarRooms) {
     await conn.query(`
@@ -199,7 +252,7 @@ async function seedResortOS() {
     `, r);
   }
 
-  console.log(`✓ Seeded ${villaRooms.length} rooms for THE VILLA and ${navkarRooms.length} rooms for NAVKAR PALACE.`);
+  console.log(`✓ Seeded exactly ${villaRooms.length} rooms for THE VILLA and ${navkarRooms.length} rooms for NAVKAR PALACE.`);
 
   // 4. SEED GUESTS & BOOKINGS
   console.log("\n[4/5] Seeding Guests & Bookings (Normal + Event Room Booking)...");

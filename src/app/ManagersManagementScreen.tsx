@@ -3,7 +3,7 @@
  * View, add, edit, assign 1:1 to hotel, reset passwords, and toggle active status.
  */
 
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -15,6 +15,7 @@ import {
   Alert,
   KeyboardAvoidingView,
   Platform,
+  ActivityIndicator,
 } from 'react-native';
 import { colors } from '../theme/colors';
 import { typography } from '../theme/typography';
@@ -28,34 +29,15 @@ import { Icon } from '../components/common/Icon';
 import { Input } from '../components/common/Input';
 import { Button } from '../components/common/Button';
 import { ManagerUser } from '../types/hotel';
+import { apiClient } from '../services/apiClient';
 
 export const ManagersManagementScreen: React.FC = () => {
   const { goBack } = useNavigation();
   const { hotels } = useHotel();
 
-  // Initial Seed Managers
-  const [managers, setManagers] = useState<ManagerUser[]>([
-    {
-      id: 'usr-mgr-villa',
-      hotelId: 'h-villa',
-      hotelName: 'THE VILLA',
-      email: 'manager.villa@resortos.com',
-      fullName: 'Sunita Sharma',
-      phone: '+91 98290 11441',
-      status: 'ACTIVE',
-      createdAt: '2026-11-14',
-    },
-    {
-      id: 'usr-mgr-navkar',
-      hotelId: 'h-navkar',
-      hotelName: 'NAVKAR PALACE & RESORT',
-      email: 'manager.navkar@resortos.com',
-      fullName: 'Rajesh Verma',
-      phone: '+91 98290 11442',
-      status: 'ACTIVE',
-      createdAt: '2026-11-14',
-    },
-  ]);
+  const [managers, setManagers] = useState<ManagerUser[]>([]);
+  const [loading, setLoading] = useState<boolean>(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   const [modalVisible, setModalVisible] = useState(false);
   const [editingManager, setEditingManager] = useState<ManagerUser | null>(null);
@@ -69,6 +51,23 @@ export const ManagersManagementScreen: React.FC = () => {
   const [assignedHotelId, setAssignedHotelId] = useState(hotels[0]?.id || 'h-villa');
   const [initialPassword, setInitialPassword] = useState('Password123!');
   const [newPassword, setNewPassword] = useState('');
+
+  const fetchManagers = useCallback(async () => {
+    setLoading(true);
+    setLoadError(null);
+    try {
+      const data = await apiClient.getManagers();
+      setManagers(data);
+    } catch (err: any) {
+      setLoadError(err.message || 'Failed to load manager accounts from database');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchManagers();
+  }, [fetchManagers]);
 
   const openAddModal = () => {
     setEditingManager(null);
@@ -89,55 +88,46 @@ export const ManagersManagementScreen: React.FC = () => {
     setModalVisible(true);
   };
 
-  const handleSaveManager = () => {
+  const handleSaveManager = async () => {
     if (!fullName.trim() || !email.trim()) {
       Alert.alert('Required Fields', 'Please provide Manager Name and Email Address');
       return;
     }
 
-    const assignedHotelObj = hotels.find((h) => h.id === assignedHotelId);
-    const hotelName = assignedHotelObj ? assignedHotelObj.name : 'Unknown Hotel';
-
-    if (editingManager) {
-      setManagers((prev) =>
-        prev.map((m) =>
-          m.id === editingManager.id
-            ? {
-                ...m,
-                fullName,
-                email,
-                phone,
-                hotelId: assignedHotelId,
-                hotelName,
-              }
-            : m
-        )
-      );
-    } else {
-      const newMgr: ManagerUser = {
-        id: `usr-mgr-${Date.now()}`,
-        fullName,
-        email,
-        phone,
-        hotelId: assignedHotelId,
-        hotelName,
-        status: 'ACTIVE',
-        createdAt: new Date().toISOString().split('T')[0],
-      };
-      setManagers((prev) => [...prev, newMgr]);
+    try {
+      if (editingManager) {
+        await apiClient.updateManager(editingManager.id, {
+          fullName,
+          email,
+          phone,
+          hotelId: assignedHotelId,
+        });
+        Alert.alert('Success', 'Manager details updated successfully');
+      } else {
+        await apiClient.createManager({
+          fullName,
+          email,
+          phone,
+          hotelId: assignedHotelId,
+          initialPassword,
+        });
+        Alert.alert('Success', 'Manager account created and assigned to hotel');
+      }
+      setModalVisible(false);
+      await fetchManagers();
+    } catch (err: any) {
+      Alert.alert('Save Error', err.message || 'Failed to save manager account in database');
     }
-
-    setModalVisible(false);
   };
 
-  const toggleStatus = (id: string) => {
-    setManagers((prev) =>
-      prev.map((m) =>
-        m.id === id
-          ? { ...m, status: m.status === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE' }
-          : m
-      )
-    );
+  const toggleStatus = async (mgr: ManagerUser) => {
+    const nextStatus = mgr.status === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE';
+    try {
+      await apiClient.updateManagerStatus(mgr.id, nextStatus);
+      await fetchManagers();
+    } catch (err: any) {
+      Alert.alert('Update Error', err.message || 'Failed to update manager status');
+    }
   };
 
   const openResetPasswordModal = (mgr: ManagerUser) => {
@@ -146,16 +136,22 @@ export const ManagersManagementScreen: React.FC = () => {
     setResetModalVisible(true);
   };
 
-  const handlePasswordReset = () => {
+  const handlePasswordReset = async () => {
     if (!newPassword || newPassword.length < 4) {
       Alert.alert('Invalid Password', 'Password must be at least 4 characters');
       return;
     }
-    Alert.alert(
-      'Password Reset Successful',
-      `Password for ${selectedForReset?.fullName} has been updated to: ${newPassword}`
-    );
-    setResetModalVisible(false);
+    if (!selectedForReset) return;
+    try {
+      await apiClient.resetManagerPassword(selectedForReset.id, newPassword);
+      Alert.alert(
+        'Password Reset Successful',
+        `Password for ${selectedForReset.fullName} has been updated in database.`
+      );
+      setResetModalVisible(false);
+    } catch (err: any) {
+      Alert.alert('Reset Error', err.message || 'Failed to reset password');
+    }
   };
 
   return (
@@ -195,78 +191,95 @@ export const ManagersManagementScreen: React.FC = () => {
         </View>
 
         {/* Managers Cards */}
-        {managers.map((mgr) => {
-          const isActive = mgr.status === 'ACTIVE';
+        {loading ? (
+          <View style={styles.centerBox}>
+            <ActivityIndicator size="large" color={colors.primaryNavy} />
+            <Text style={styles.loadingText}>Loading manager accounts from database...</Text>
+          </View>
+        ) : loadError ? (
+          <View style={styles.errorBox}>
+            <Icon name="alert-circle" size={32} color={colors.error} />
+            <Text style={styles.errorText}>{loadError}</Text>
+            <Button title="Retry" size="sm" variant="outline" onPress={fetchManagers} style={{ marginTop: 8 }} />
+          </View>
+        ) : managers.length === 0 ? (
+          <View style={styles.emptyBox}>
+            <Text style={styles.emptyText}>No manager accounts found in database.</Text>
+          </View>
+        ) : (
+          managers.map((mgr) => {
+            const isActive = mgr.status === 'ACTIVE';
 
-          return (
-            <Card key={mgr.id} padding="lg" variant="elevated" style={styles.managerCard}>
-              <View style={styles.cardHeader}>
-                <View style={styles.managerIdentity}>
-                  <View style={styles.avatar}>
-                    <Icon name="user" size={24} color="#047857" />
+            return (
+              <Card key={mgr.id} padding="lg" variant="elevated" style={styles.managerCard}>
+                <View style={styles.cardHeader}>
+                  <View style={styles.managerIdentity}>
+                    <View style={styles.avatar}>
+                      <Icon name="user" size={24} color="#047857" />
+                    </View>
+                    <View style={styles.titleBlock}>
+                      <Text style={styles.managerName}>{mgr.fullName}</Text>
+                      <Text style={styles.managerEmail}>{mgr.email}</Text>
+                    </View>
                   </View>
-                  <View style={styles.titleBlock}>
-                    <Text style={styles.managerName}>{mgr.fullName}</Text>
-                    <Text style={styles.managerEmail}>{mgr.email}</Text>
+
+                  <Badge
+                    label={isActive ? 'ACTIVE' : 'INACTIVE'}
+                    variant={isActive ? 'success' : 'error'}
+                    size="sm"
+                  />
+                </View>
+
+                {/* Assignment Box */}
+                <View style={styles.assignmentBox}>
+                  <View style={styles.assignRow}>
+                    <Text style={styles.assignLabel}>Assigned Property:</Text>
+                    <Text style={styles.assignHotelName}>{mgr.hotelName}</Text>
+                  </View>
+                  <View style={styles.assignRow}>
+                    <Text style={styles.assignLabel}>Contact Phone:</Text>
+                    <Text style={styles.assignValue}>{mgr.phone}</Text>
+                  </View>
+                  <View style={styles.assignRow}>
+                    <Text style={styles.assignLabel}>Permissions:</Text>
+                    <Text style={styles.assignValue}>Single Hotel Only (No Salaries/Reports)</Text>
                   </View>
                 </View>
 
-                <Badge
-                  label={isActive ? 'ACTIVE' : 'INACTIVE'}
-                  variant={isActive ? 'success' : 'error'}
-                  size="sm"
-                />
-              </View>
+                {/* Actions */}
+                <View style={styles.actionsRow}>
+                  <TouchableOpacity
+                    style={[styles.actionBtn, styles.editBtn]}
+                    onPress={() => openEditModal(mgr)}
+                  >
+                    <Icon name="edit" size={14} color={colors.primaryNavy} />
+                    <Text style={styles.editBtnText}>Edit</Text>
+                  </TouchableOpacity>
 
-              {/* Assignment Box */}
-              <View style={styles.assignmentBox}>
-                <View style={styles.assignRow}>
-                  <Text style={styles.assignLabel}>Assigned Property:</Text>
-                  <Text style={styles.assignHotelName}>{mgr.hotelName}</Text>
+                  <TouchableOpacity
+                    style={[styles.actionBtn, styles.resetBtn]}
+                    onPress={() => openResetPasswordModal(mgr)}
+                  >
+                    <Icon name="lock" size={14} color="#D97706" />
+                    <Text style={styles.resetBtnText}>Reset Password</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={[
+                      styles.actionBtn,
+                      isActive ? styles.deactivateBtn : styles.activateBtn,
+                    ]}
+                    onPress={() => toggleStatus(mgr)}
+                  >
+                    <Text style={isActive ? styles.deactivateText : styles.activateText}>
+                      {isActive ? 'Deactivate' : 'Activate'}
+                    </Text>
+                  </TouchableOpacity>
                 </View>
-                <View style={styles.assignRow}>
-                  <Text style={styles.assignLabel}>Contact Phone:</Text>
-                  <Text style={styles.assignValue}>{mgr.phone}</Text>
-                </View>
-                <View style={styles.assignRow}>
-                  <Text style={styles.assignLabel}>Permissions:</Text>
-                  <Text style={styles.assignValue}>Single Hotel Only (No Salaries/Reports)</Text>
-                </View>
-              </View>
-
-              {/* Actions */}
-              <View style={styles.actionsRow}>
-                <TouchableOpacity
-                  style={[styles.actionBtn, styles.editBtn]}
-                  onPress={() => openEditModal(mgr)}
-                >
-                  <Icon name="edit" size={14} color={colors.primaryNavy} />
-                  <Text style={styles.editBtnText}>Edit</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  style={[styles.actionBtn, styles.resetBtn]}
-                  onPress={() => openResetPasswordModal(mgr)}
-                >
-                  <Icon name="lock" size={14} color="#D97706" />
-                  <Text style={styles.resetBtnText}>Reset Password</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  style={[
-                    styles.actionBtn,
-                    isActive ? styles.deactivateBtn : styles.activateBtn,
-                  ]}
-                  onPress={() => toggleStatus(mgr.id)}
-                >
-                  <Text style={isActive ? styles.deactivateText : styles.activateText}>
-                    {isActive ? 'Deactivate' : 'Activate'}
-                  </Text>
-                </TouchableOpacity>
-              </View>
-            </Card>
-          );
-        })}
+              </Card>
+            );
+          })
+        )}
       </ScrollView>
 
       {/* Add / Edit Manager Modal */}
@@ -636,6 +649,39 @@ const styles = StyleSheet.create({
   modalActionsRow: {
     flexDirection: 'row',
     marginTop: spacing.sm,
+  },
+  centerBox: {
+    padding: spacing.xl,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  loadingText: {
+    ...typography.caption,
+    color: colors.textSecondary,
+    marginTop: spacing.sm,
+  },
+  errorBox: {
+    padding: spacing.lg,
+    alignItems: 'center',
+    backgroundColor: '#FEF2F2',
+    borderRadius: borderRadius.md,
+    borderWidth: 1,
+    borderColor: '#FECACA',
+    marginVertical: spacing.md,
+  },
+  errorText: {
+    ...typography.caption,
+    color: colors.error,
+    textAlign: 'center',
+    marginTop: spacing.xs,
+  },
+  emptyBox: {
+    padding: spacing.xl,
+    alignItems: 'center',
+  },
+  emptyText: {
+    ...typography.caption,
+    color: colors.textMuted,
   },
 });
 

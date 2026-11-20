@@ -3,7 +3,7 @@
  * Record, view, and track staff salary advance loans and auto-deduction status.
  */
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -15,6 +15,7 @@ import {
   Alert,
   KeyboardAvoidingView,
   Platform,
+  ActivityIndicator,
 } from 'react-native';
 import { colors } from '../theme/colors';
 import { typography } from '../theme/typography';
@@ -29,40 +30,15 @@ import { Input } from '../components/common/Input';
 import { Button } from '../components/common/Button';
 import { StaffAdvance } from '../types/hotel';
 import { formatCurrency } from '../utils/formatters';
+import { apiClient } from '../services/apiClient';
 
 export const SalaryAdvancesScreen: React.FC = () => {
   const { goBack } = useNavigation();
   const { hotels } = useHotel();
 
-  // Initial advances
-  const [advances, setAdvances] = useState<StaffAdvance[]>([
-    {
-      id: 'adv-v-01',
-      hotelId: 'h-villa',
-      staffId: 'stf-v-1',
-      staffName: 'Manoj Kumar',
-      staffRole: 'Receptionist (THE VILLA)',
-      advanceDate: '2026-11-05',
-      amount: 3000,
-      reason: 'Medical emergency for mother',
-      paymentMethod: 'Cash',
-      isDeducted: false,
-      deductedMonth: 'Nov 2026 (Pending)',
-    },
-    {
-      id: 'adv-n-01',
-      hotelId: 'h-navkar',
-      staffId: 'stf-n-2',
-      staffName: 'Kamla Devi',
-      staffRole: 'Housekeeping Incharge (NAVKAR PALACE)',
-      advanceDate: '2026-10-12',
-      amount: 2000,
-      reason: 'Diwali family festival expense',
-      paymentMethod: 'UPI',
-      isDeducted: true,
-      deductedMonth: 'October 2026 (Settled)',
-    },
-  ]);
+  const [advances, setAdvances] = useState<StaffAdvance[]>([]);
+  const [loading, setLoading] = useState<boolean>(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   const [modalVisible, setModalVisible] = useState(false);
   const [filterHotel, setFilterHotel] = useState<'all' | 'h-villa' | 'h-navkar'>('all');
@@ -75,6 +51,23 @@ export const SalaryAdvancesScreen: React.FC = () => {
   const [paymentMethod, setPaymentMethod] = useState<'Cash' | 'UPI' | 'Bank Transfer'>('Cash');
   const [advanceDate, setAdvanceDate] = useState(new Date().toISOString().split('T')[0]);
 
+  const fetchAdvances = useCallback(async () => {
+    setLoading(true);
+    setLoadError(null);
+    try {
+      const data = await apiClient.getSalaryAdvances(filterHotel === 'all' ? undefined : filterHotel);
+      setAdvances(data);
+    } catch (err: any) {
+      setLoadError(err.message || 'Failed to load salary advances from database');
+    } finally {
+      setLoading(false);
+    }
+  }, [filterHotel]);
+
+  useEffect(() => {
+    fetchAdvances();
+  }, [fetchAdvances]);
+
   const filteredAdvances = useMemo(() => {
     if (filterHotel === 'all') return advances;
     return advances.filter((a) => a.hotelId === filterHotel);
@@ -86,7 +79,7 @@ export const SalaryAdvancesScreen: React.FC = () => {
       .reduce((sum, a) => sum + a.amount, 0);
   }, [filteredAdvances]);
 
-  const handleCreateAdvance = () => {
+  const handleCreateAdvance = async () => {
     if (!staffName.trim() || !amount.trim()) {
       Alert.alert('Required Fields', 'Please enter staff name and advance amount');
       return;
@@ -95,36 +88,33 @@ export const SalaryAdvancesScreen: React.FC = () => {
     const amt = parseFloat(amount) || 0;
     const hotelName = targetHotelId === 'h-villa' ? 'THE VILLA' : 'NAVKAR PALACE';
 
-    const newAdv: StaffAdvance = {
-      id: `adv-${Date.now()}`,
-      hotelId: targetHotelId,
-      staffId: `stf-custom-${Date.now()}`,
-      staffName,
-      staffRole: `Staff Member (${hotelName})`,
-      advanceDate,
-      amount: amt,
-      reason: reason || 'Salary advance',
-      paymentMethod,
-      isDeducted: false,
-      deductedMonth: 'Upcoming Salary (Pending)',
-    };
-
-    setAdvances((prev) => [newAdv, ...prev]);
-    setModalVisible(false);
+    try {
+      await apiClient.createSalaryAdvance({
+        hotelId: targetHotelId,
+        staffName,
+        staffRole: `Staff Member (${hotelName})`,
+        advanceDate,
+        amount: amt,
+        reason: reason || 'Salary advance',
+        paymentMethod,
+      });
+      Alert.alert('Success', 'Salary advance logged in database');
+      setModalVisible(false);
+      await fetchAdvances();
+    } catch (err: any) {
+      Alert.alert('Save Error', err.message || 'Failed to record salary advance');
+    }
   };
 
-  const toggleDeducted = (id: string) => {
-    setAdvances((prev) =>
-      prev.map((a) =>
-        a.id === id
-          ? {
-              ...a,
-              isDeducted: !a.isDeducted,
-              deductedMonth: !a.isDeducted ? 'Manually Settled' : 'Pending Deduction',
-            }
-          : a
-      )
-    );
+  const toggleDeducted = async (adv: StaffAdvance) => {
+    const nextDeducted = !adv.isDeducted;
+    const nextMonth = nextDeducted ? 'Manually Settled' : 'Pending Deduction';
+    try {
+      await apiClient.toggleSalaryAdvanceDeducted(adv.id, nextDeducted, nextMonth);
+      await fetchAdvances();
+    } catch (err: any) {
+      Alert.alert('Update Error', err.message || 'Failed to update advance deduction status');
+    }
   };
 
   return (
@@ -193,70 +183,87 @@ export const SalaryAdvancesScreen: React.FC = () => {
         {/* Advances List */}
         <Text style={styles.sectionHeader}>Advance Records ({filteredAdvances.length})</Text>
 
-        {filteredAdvances.map((adv) => (
-          <Card key={adv.id} padding="lg" variant="elevated" style={styles.advCard}>
-            <View style={styles.cardHeader}>
-              <View style={styles.staffBlock}>
-                <Text style={styles.staffName}>{adv.staffName}</Text>
-                <Text style={styles.roleSub}>{adv.staffRole}</Text>
-              </View>
-              <Badge
-                label={adv.isDeducted ? 'DEDUCTED' : 'PENDING'}
-                variant={adv.isDeducted ? 'success' : 'warning'}
-                size="sm"
-              />
-            </View>
-
-            <View style={styles.infoBox}>
-              <View style={styles.infoRow}>
-                <Text style={styles.infoLabel}>Advance Amount:</Text>
-                <Text style={styles.amountText}>{formatCurrency(adv.amount)}</Text>
-              </View>
-              <View style={styles.infoRow}>
-                <Text style={styles.infoLabel}>Disbursement Date:</Text>
-                <Text style={styles.infoVal}>{adv.advanceDate}</Text>
-              </View>
-              <View style={styles.infoRow}>
-                <Text style={styles.infoLabel}>Payment Mode:</Text>
-                <Text style={styles.infoVal}>{adv.paymentMethod}</Text>
-              </View>
-              <View style={styles.infoRow}>
-                <Text style={styles.infoLabel}>Reason:</Text>
-                <Text style={styles.infoVal}>{adv.reason}</Text>
-              </View>
-              <View style={styles.infoRow}>
-                <Text style={styles.infoLabel}>Deduction Status:</Text>
-                <Text style={[styles.infoVal, { color: adv.isDeducted ? colors.success : colors.textSecondary }]}>
-                  {adv.deductedMonth}
-                </Text>
-              </View>
-            </View>
-
-            <View style={styles.cardActions}>
-              <TouchableOpacity
-                style={[
-                  styles.toggleBtn,
-                  adv.isDeducted ? styles.undeductBtn : styles.deductBtn,
-                ]}
-                onPress={() => toggleDeducted(adv.id)}
-              >
-                <Icon
-                  name={adv.isDeducted ? 'rotate-ccw' : 'check'}
-                  size={14}
-                  color={adv.isDeducted ? colors.textSecondary : '#047857'}
+        {loading ? (
+          <View style={styles.centerBox}>
+            <ActivityIndicator size="large" color={colors.primaryNavy} />
+            <Text style={styles.loadingText}>Loading salary advances from database...</Text>
+          </View>
+        ) : loadError ? (
+          <View style={styles.errorBox}>
+            <Icon name="alert-circle" size={32} color={colors.error} />
+            <Text style={styles.errorText}>{loadError}</Text>
+            <Button title="Retry" size="sm" variant="outline" onPress={fetchAdvances} style={{ marginTop: 8 }} />
+          </View>
+        ) : filteredAdvances.length === 0 ? (
+          <View style={styles.emptyBox}>
+            <Text style={styles.emptyText}>No salary advances found in database for this selection.</Text>
+          </View>
+        ) : (
+          filteredAdvances.map((adv) => (
+            <Card key={adv.id} padding="lg" variant="elevated" style={styles.advCard}>
+              <View style={styles.cardHeader}>
+                <View style={styles.staffBlock}>
+                  <Text style={styles.staffName}>{adv.staffName}</Text>
+                  <Text style={styles.roleSub}>{adv.staffRole}</Text>
+                </View>
+                <Badge
+                  label={adv.isDeducted ? 'DEDUCTED' : 'PENDING'}
+                  variant={adv.isDeducted ? 'success' : 'warning'}
+                  size="sm"
                 />
-                <Text
+              </View>
+
+              <View style={styles.infoBox}>
+                <View style={styles.infoRow}>
+                  <Text style={styles.infoLabel}>Advance Amount:</Text>
+                  <Text style={styles.amountText}>{formatCurrency(adv.amount)}</Text>
+                </View>
+                <View style={styles.infoRow}>
+                  <Text style={styles.infoLabel}>Disbursement Date:</Text>
+                  <Text style={styles.infoVal}>{adv.advanceDate}</Text>
+                </View>
+                <View style={styles.infoRow}>
+                  <Text style={styles.infoLabel}>Payment Mode:</Text>
+                  <Text style={styles.infoVal}>{adv.paymentMethod}</Text>
+                </View>
+                <View style={styles.infoRow}>
+                  <Text style={styles.infoLabel}>Reason:</Text>
+                  <Text style={styles.infoVal}>{adv.reason}</Text>
+                </View>
+                <View style={styles.infoRow}>
+                  <Text style={styles.infoLabel}>Deduction Status:</Text>
+                  <Text style={[styles.infoVal, { color: adv.isDeducted ? colors.success : colors.textSecondary }]}>
+                    {adv.deductedMonth}
+                  </Text>
+                </View>
+              </View>
+
+              <View style={styles.cardActions}>
+                <TouchableOpacity
                   style={[
-                    styles.toggleBtnText,
-                    { color: adv.isDeducted ? colors.textSecondary : '#047857' },
+                    styles.toggleBtn,
+                    adv.isDeducted ? styles.undeductBtn : styles.deductBtn,
                   ]}
+                  onPress={() => toggleDeducted(adv)}
                 >
-                  {adv.isDeducted ? 'Mark as Pending' : 'Mark as Deducted'}
-                </Text>
-              </TouchableOpacity>
-            </View>
-          </Card>
-        ))}
+                  <Icon
+                    name={adv.isDeducted ? 'rotate-ccw' : 'check'}
+                    size={14}
+                    color={adv.isDeducted ? colors.textSecondary : '#047857'}
+                  />
+                  <Text
+                    style={[
+                      styles.toggleBtnText,
+                      { color: adv.isDeducted ? colors.textSecondary : '#047857' },
+                    ]}
+                  >
+                    {adv.isDeducted ? 'Mark as Pending' : 'Mark as Deducted'}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </Card>
+          ))
+        )}
       </ScrollView>
 
       {/* New Advance Modal */}
@@ -574,6 +581,39 @@ const styles = StyleSheet.create({
   modalSaveBtn: {
     marginTop: spacing.md,
     marginBottom: spacing.md,
+  },
+  centerBox: {
+    padding: spacing.xl,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  loadingText: {
+    ...typography.caption,
+    color: colors.textSecondary,
+    marginTop: spacing.sm,
+  },
+  errorBox: {
+    padding: spacing.lg,
+    alignItems: 'center',
+    backgroundColor: '#FEF2F2',
+    borderRadius: borderRadius.md,
+    borderWidth: 1,
+    borderColor: '#FECACA',
+    marginVertical: spacing.md,
+  },
+  errorText: {
+    ...typography.caption,
+    color: colors.error,
+    textAlign: 'center',
+    marginTop: spacing.xs,
+  },
+  emptyBox: {
+    padding: spacing.xl,
+    alignItems: 'center',
+  },
+  emptyText: {
+    ...typography.caption,
+    color: colors.textMuted,
   },
 });
 

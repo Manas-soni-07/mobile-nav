@@ -1,10 +1,10 @@
 /**
- * ResortOS - Manager Dashboard Screen
- * Dedicated operational console strictly scoped to the manager's assigned hotel.
- * Displays 8 KPI cards and 7 operational modules. Admin-only sections are omitted.
+ * ResortOS - Property Manager Console
+ * Single-hotel operational console with strict property isolation.
+ * Displays 6 Core Operational Metrics, Interactive Dashboard Calendar, and 7 Management Modules.
  */
 
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -13,6 +13,7 @@ import {
   TouchableOpacity,
   SafeAreaView,
   Alert,
+  useWindowDimensions,
 } from 'react-native';
 import { colors } from '../theme/colors';
 import { typography } from '../theme/typography';
@@ -20,14 +21,17 @@ import { spacing, borderRadius, shadows } from '../theme/spacing';
 import { useNavigation } from '../hooks/useNavigation';
 import { useHotel } from '../hooks/useHotel';
 import { Header } from '../components/common/Header';
-import { Card } from '../components/common/Card';
 import { Badge } from '../components/common/Badge';
 import { Icon, IconName } from '../components/common/Icon';
 import { KPICard } from '../components/dashboard/KPICard';
+import { DashboardCalendar } from '../components/dashboard/DashboardCalendar';
 import { formatCurrency } from '../utils/formatters';
 
 export const ManagerDashboardScreen: React.FC = () => {
   const { navigate } = useNavigation();
+  const { width } = useWindowDimensions();
+  const isDesktop = width >= 1024;
+
   const {
     selectedHotelId,
     selectedHotel,
@@ -45,25 +49,59 @@ export const ManagerDashboardScreen: React.FC = () => {
   const assignedHotelCode =
     currentUser?.assignedHotel?.code || selectedHotel?.code || (hotelId === 'h-villa' ? 'TV-01' : 'NPR-02');
 
-  // Compute 8 core KPIs for this assigned hotel only
+  const [activeBottomTab, setActiveBottomTab] = useState<'checkins' | 'checkouts' | 'recent'>('checkins');
+
+  // Indian standard date
+  const todayStr = useMemo(() => {
+    try {
+      const formatter = new Intl.DateTimeFormat('en-CA', {
+        timeZone: 'Asia/Kolkata',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+      });
+      return formatter.format(new Date());
+    } catch {
+      return new Date().toISOString().split('T')[0];
+    }
+  }, []);
+
+  // Filter isolated data strictly for assigned hotel
+  const hotelRooms = useMemo(() => rooms.filter((r) => r.hotelId === hotelId), [rooms, hotelId]);
+  const hotelBookings = useMemo(() => bookings.filter((b) => b.hotelId === hotelId), [bookings, hotelId]);
+  const hotelFolios = useMemo(() => folios.filter((f) => f.hotelId === hotelId), [folios, hotelId]);
+
+  // Compute 6 core operational metrics for this assigned hotel only
   const kpis = useMemo(() => {
-    const hotelRooms = rooms.filter((r) => r.hotelId === hotelId);
-    const hotelBookings = bookings.filter((b) => b.hotelId === hotelId);
-    const hotelFolios = folios.filter((f) => f.hotelId === hotelId);
+    // 70 for Navkar Palace, 15 for The Villa
+    const totalRooms = hotelRooms.length;
+    const occupiedRooms = hotelRooms.filter((r) => r.status === 'occupied').length;
+    const cleaningRooms = hotelRooms.filter((r) => r.status === 'cleaning').length;
+    const maintenanceRooms = hotelRooms.filter((r) => r.status === 'maintenance').length;
+    const availableRooms = Math.max(0, totalRooms - (occupiedRooms + cleaningRooms + maintenanceRooms));
 
-    const totalRooms = hotelId === 'h-villa' ? 20 : 35;
-    const availableRooms = hotelRooms.filter((r) => r.status === 'available').length || 6;
-    const occupiedRooms = hotelRooms.filter((r) => r.status === 'occupied').length || 3;
+    // Today's Check-ins: Actual check-in events scheduled/performed for today's date
+    const todayCheckIns = hotelBookings.filter(
+      (b) => b.checkInDate === todayStr && b.status !== 'cancelled'
+    ).length;
 
-    // Today's Check-ins & Check-outs
-    const todayStr = '2026-11-16';
-    const todayCheckIns = hotelBookings.filter((b) => b.checkInDate <= todayStr && b.status === 'confirmed').length || 1;
-    const todayCheckOuts = hotelBookings.filter((b) => b.checkOutDate <= todayStr).length || 1;
-    const todayBookings = hotelBookings.length || 2;
+    // Today's Check-outs: Actual check-out events scheduled/performed for today's date
+    const todayCheckOuts = hotelBookings.filter(
+      (b) => b.checkOutDate === todayStr && b.status !== 'cancelled'
+    ).length;
+
+    // Today's Bookings: Bookings created or arriving today
+    const todayBookings = hotelBookings.filter(
+      (b) => (b.createdAt === todayStr || b.checkInDate === todayStr) && b.status !== 'cancelled'
+    ).length;
 
     // Collections & Pending for this hotel only
-    const todayCollections = hotelFolios.reduce((acc, f) => acc + (f.paidAmount || 0), 0) + (hotelId === 'h-villa' ? 35000 : 43500);
-    const pendingPayments = hotelFolios.reduce((acc, f) => acc + (f.balanceDue || 0), 0) + (hotelId === 'h-villa' ? 12000 : 12500);
+    const todayCollections = hotelFolios
+      .filter((f) => f.status === 'settled' || (f.paidAmount && f.paidAmount > 0))
+      .reduce((acc, f) => acc + (f.paidAmount || 0), 0);
+    const pendingPayments = hotelFolios
+      .filter((f) => f.status === 'open' && f.balanceDue > 0)
+      .reduce((acc, f) => acc + (f.balanceDue || 0), 0);
 
     return {
       totalRooms,
@@ -75,7 +113,26 @@ export const ManagerDashboardScreen: React.FC = () => {
       todayCollections,
       pendingPayments,
     };
-  }, [hotelId, rooms, bookings, folios]);
+  }, [hotelRooms, hotelBookings, hotelFolios, todayStr]);
+
+  // Filtered operational lists for bottom section
+  const todayCheckInList = useMemo(() => {
+    return hotelBookings.filter(
+      (b) => b.checkInDate === todayStr && b.status !== 'cancelled'
+    );
+  }, [hotelBookings, todayStr]);
+
+  const todayCheckOutList = useMemo(() => {
+    return hotelBookings.filter(
+      (b) => b.checkOutDate === todayStr && b.status !== 'cancelled'
+    );
+  }, [hotelBookings, todayStr]);
+
+  const recentBookingsList = useMemo(() => {
+    return [...hotelBookings]
+      .filter((b) => b.status !== 'cancelled')
+      .slice(0, 5);
+  }, [hotelBookings]);
 
   const handleSignOut = () => {
     Alert.alert('Sign Out', 'Log out of property manager console?', [
@@ -90,7 +147,7 @@ export const ManagerDashboardScreen: React.FC = () => {
     ]);
   };
 
-  // 7 Manager Navigation Modules (Section 8 Mandate)
+  // 7 Manager Navigation Modules
   const managerModules: { id: string; title: string; subtitle: string; icon: IconName; screen: any; color: string }[] = [
     {
       id: 'mod-advance-booking',
@@ -169,107 +226,243 @@ export const ManagerDashboardScreen: React.FC = () => {
           <View style={styles.bannerInfo}>
             <Text style={styles.bannerTag}>ASSIGNED PROPERTY CONSOLE</Text>
             <Text style={styles.bannerTitle}>{assignedHotelName}</Text>
-            <Text style={styles.managerNotice}>Logged in as Property Manager • Isolated Data</Text>
+            <Text style={styles.managerNotice}>
+              Logged in as Property Manager • Locked to {kpis.totalRooms} Rooms
+            </Text>
           </View>
-          <Badge label="LOCKED" variant="success" size="sm" />
+          <Badge label={`${kpis.totalRooms} ROOMS`} variant="success" size="sm" />
         </View>
 
-        {/* 8 DASHBOARD KPI CARDS (SECTION 8 MANDATE) */}
-        <Text style={styles.sectionHeader}>Today's Operational Metrics</Text>
+        {/* ============================================================== */}
+        {/* UPPER SECTION: OPERATIONAL METRICS (LEFT) + CALENDAR (RIGHT)   */}
+        {/* ============================================================== */}
+        <View style={[styles.mainSectionLayout, isDesktop && styles.mainDesktopLayout]}>
+          {/* Left Column: Today's 6 Operational Metrics */}
+          <View style={[styles.metricsCol, isDesktop && styles.metricsDesktopCol]}>
+            <View style={styles.sectionHeaderRow}>
+              <View>
+                <Text style={styles.sectionHeader}>Today's Operational Metrics</Text>
+                <Text style={styles.sectionSubtitle}>
+                  Dynamic property stats for {todayStr}
+                </Text>
+              </View>
+            </View>
 
-        <View style={styles.kpiGrid}>
-          {/* 1. Total Rooms */}
-          <View style={styles.kpiCol}>
-            <KPICard
-              title="Total Rooms"
-              value={kpis.totalRooms.toString()}
-              icon="grid"
-              accentColor={colors.primaryNavy}
-              onPress={() => navigate('rooms')}
-            />
+            {/* 6 Independent Operational Metric Cards */}
+            <View style={styles.kpiGrid}>
+              {/* 1. Total Rooms */}
+              <View style={styles.kpiCol}>
+                <KPICard
+                  title="Total Rooms"
+                  value={kpis.totalRooms.toString()}
+                  icon="grid"
+                  accentColor={colors.primaryNavy}
+                  subtitle={hotelId === 'h-navkar' ? '70 Active Rooms' : '15 Active Rooms'}
+                  onPress={() => navigate('rooms')}
+                />
+              </View>
+
+              {/* 2. Available Rooms */}
+              <View style={styles.kpiCol}>
+                <KPICard
+                  title="Available Rooms"
+                  value={kpis.availableRooms.toString()}
+                  icon="check-circle"
+                  accentColor={colors.success}
+                  subtitle="Vacant & Ready"
+                  onPress={() => navigate('rooms')}
+                />
+              </View>
+
+              {/* 3. Occupied Rooms */}
+              <View style={styles.kpiCol}>
+                <KPICard
+                  title="Occupied Rooms"
+                  value={kpis.occupiedRooms.toString()}
+                  icon="user-check"
+                  accentColor="#0284C7"
+                  subtitle="Active In-House"
+                  onPress={() => navigate('rooms')}
+                />
+              </View>
+
+              {/* 4. Today's Check-ins */}
+              <View style={styles.kpiCol}>
+                <KPICard
+                  title="Today's Check-ins"
+                  value={kpis.todayCheckIns.toString()}
+                  icon="log-in"
+                  accentColor="#059669"
+                  subtitle="Scheduled Arrivals"
+                  onPress={() => navigate('checkin-rooms')}
+                />
+              </View>
+
+              {/* 5. Today's Check-outs */}
+              <View style={styles.kpiCol}>
+                <KPICard
+                  title="Today's Check-outs"
+                  value={kpis.todayCheckOuts.toString()}
+                  icon="log-out"
+                  accentColor="#D97706"
+                  subtitle="Scheduled Departures"
+                  onPress={() => navigate('checkin-rooms')}
+                />
+              </View>
+
+              {/* 6. Today's Bookings */}
+              <View style={styles.kpiCol}>
+                <KPICard
+                  title="Today's Bookings"
+                  value={kpis.todayBookings.toString()}
+                  icon="calendar"
+                  accentColor="#7C3AED"
+                  subtitle="Created / Arriving Today"
+                  onPress={() => navigate('advance-booking')}
+                />
+              </View>
+            </View>
+
+            {/* Financial Overview Cards */}
+            <View style={styles.financialRow}>
+              <View style={styles.finCol}>
+                <KPICard
+                  title="Collections"
+                  value={formatCurrency(kpis.todayCollections)}
+                  icon="credit-card"
+                  accentColor="#16A34A"
+                  subtitle="Settled Revenue"
+                  onPress={() => navigate('billing')}
+                />
+              </View>
+              <View style={styles.finCol}>
+                <KPICard
+                  title="Pending Due"
+                  value={formatCurrency(kpis.pendingPayments)}
+                  icon="alert-circle"
+                  accentColor="#DC2626"
+                  subtitle="Guest Balances"
+                  onPress={() => navigate('billing')}
+                />
+              </View>
+            </View>
           </View>
 
-          {/* 2. Available Rooms */}
-          <View style={styles.kpiCol}>
-            <KPICard
-              title="Available Rooms"
-              value={kpis.availableRooms.toString()}
-              icon="check-circle"
-              accentColor={colors.success}
-              onPress={() => navigate('rooms')}
-            />
-          </View>
-
-          {/* 3. Occupied Rooms */}
-          <View style={styles.kpiCol}>
-            <KPICard
-              title="Occupied Rooms"
-              value={kpis.occupiedRooms.toString()}
-              icon="user-check"
-              accentColor="#0284C7"
-              onPress={() => navigate('rooms')}
-            />
-          </View>
-
-          {/* 4. Today's Check-ins */}
-          <View style={styles.kpiCol}>
-            <KPICard
-              title="Today's Check-ins"
-              value={kpis.todayCheckIns.toString()}
-              icon="log-in"
-              accentColor="#059669"
-              onPress={() => navigate('checkin-rooms')}
-            />
-          </View>
-
-          {/* 5. Today's Check-outs */}
-          <View style={styles.kpiCol}>
-            <KPICard
-              title="Today's Check-outs"
-              value={kpis.todayCheckOuts.toString()}
-              icon="log-out"
-              accentColor="#D97706"
-              onPress={() => navigate('checkin-rooms')}
-            />
-          </View>
-
-          {/* 6. Today's Bookings */}
-          <View style={styles.kpiCol}>
-            <KPICard
-              title="Active Bookings"
-              value={kpis.todayBookings.toString()}
-              icon="calendar"
-              accentColor="#7C3AED"
-              onPress={() => navigate('advance-booking')}
-            />
-          </View>
-
-          {/* 7. Today's Collections (INR) */}
-          <View style={styles.kpiCol}>
-            <KPICard
-              title="Collections"
-              value={formatCurrency(kpis.todayCollections)}
-              icon="credit-card"
-              accentColor="#16A34A"
-              onPress={() => navigate('billing')}
-            />
-          </View>
-
-          {/* 8. Pending Payments (INR) */}
-          <View style={styles.kpiCol}>
-            <KPICard
-              title="Pending Payments"
-              value={formatCurrency(kpis.pendingPayments)}
-              icon="alert-circle"
-              accentColor="#DC2626"
-              onPress={() => navigate('billing')}
+          {/* Right Column: Modern Interactive Dashboard Calendar */}
+          <View style={[styles.calendarCol, isDesktop && styles.calendarDesktopCol]}>
+            <DashboardCalendar
+              hotelId={hotelId}
+              hotelName={assignedHotelName}
+              bookings={hotelBookings}
+              rooms={hotelRooms}
+              onSelectBooking={(b) => navigate('checkin-rooms')}
+              onSelectRoom={(r) => navigate('rooms')}
             />
           </View>
         </View>
 
-        {/* 7 MANAGER MODULES */}
-        <Text style={[styles.sectionHeader, { marginTop: spacing.lg }]}>
-          Manager Operations ({managerModules.length})
+        {/* ============================================================== */}
+        {/* BELOW SECTION: RECENT BOOKINGS / TODAY'S CHECK-INS & CHECK-OUTS*/}
+        {/* ============================================================== */}
+        <View style={styles.operationsSection}>
+          <View style={styles.opsTabRow}>
+            <TouchableOpacity
+              style={[styles.opsTab, activeBottomTab === 'checkins' && styles.opsTabActive]}
+              onPress={() => setActiveBottomTab('checkins')}
+            >
+              <Text style={[styles.opsTabText, activeBottomTab === 'checkins' && styles.opsTabTextActive]}>
+                Today's Check-ins ({todayCheckInList.length})
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.opsTab, activeBottomTab === 'checkouts' && styles.opsTabActive]}
+              onPress={() => setActiveBottomTab('checkouts')}
+            >
+              <Text style={[styles.opsTabText, activeBottomTab === 'checkouts' && styles.opsTabTextActive]}>
+                Today's Check-outs ({todayCheckOutList.length})
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.opsTab, activeBottomTab === 'recent' && styles.opsTabActive]}
+              onPress={() => setActiveBottomTab('recent')}
+            >
+              <Text style={[styles.opsTabText, activeBottomTab === 'recent' && styles.opsTabTextActive]}>
+                Recent Bookings ({recentBookingsList.length})
+              </Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* Tab Content List */}
+          <View style={styles.opsContentCard}>
+            {activeBottomTab === 'checkins' && (
+              todayCheckInList.length === 0 ? (
+                <Text style={styles.opsEmptyText}>No check-ins scheduled for today.</Text>
+              ) : (
+                todayCheckInList.map((item) => (
+                  <View key={item.id} style={styles.opsListItem}>
+                    <View style={styles.opsIconCircle}>
+                      <Icon name="log-in" size={16} color="#059669" />
+                    </View>
+                    <View style={styles.opsItemInfo}>
+                      <Text style={styles.opsItemTitle}>{item.guestName}</Text>
+                      <Text style={styles.opsItemSub}>
+                        Room {item.roomNumber || 'TBD'} • {item.guestPhone} • {item.numberOfGuests} Guests
+                      </Text>
+                    </View>
+                    <Badge label={item.status.toUpperCase()} variant="success" size="sm" />
+                  </View>
+                ))
+              )
+            )}
+
+            {activeBottomTab === 'checkouts' && (
+              todayCheckOutList.length === 0 ? (
+                <Text style={styles.opsEmptyText}>No check-outs scheduled for today.</Text>
+              ) : (
+                todayCheckOutList.map((item) => (
+                  <View key={item.id} style={styles.opsListItem}>
+                    <View style={[styles.opsIconCircle, { backgroundColor: '#FEF3C7' }]}>
+                      <Icon name="log-out" size={16} color="#D97706" />
+                    </View>
+                    <View style={styles.opsItemInfo}>
+                      <Text style={styles.opsItemTitle}>{item.guestName}</Text>
+                      <Text style={styles.opsItemSub}>
+                        Room {item.roomNumber || 'TBD'} • {item.guestPhone} • Total ₹{item.totalAmount.toLocaleString('en-IN')}
+                      </Text>
+                    </View>
+                    <Badge label={item.paymentStatus === 'paid' ? 'PAID' : 'DUE'} variant={item.paymentStatus === 'paid' ? 'success' : 'warning'} size="sm" />
+                  </View>
+                ))
+              )
+            )}
+
+            {activeBottomTab === 'recent' && (
+              recentBookingsList.map((item) => (
+                <View key={item.id} style={styles.opsListItem}>
+                  <View style={[styles.opsIconCircle, { backgroundColor: '#EFF6FF' }]}>
+                    <Icon name="calendar" size={16} color="#2563EB" />
+                  </View>
+                  <View style={styles.opsItemInfo}>
+                    <Text style={styles.opsItemTitle}>{item.guestName} ({item.bookingReference})</Text>
+                    <Text style={styles.opsItemSub}>
+                      {item.checkInDate} to {item.checkOutDate} • Room {item.roomNumber || 'TBD'}
+                    </Text>
+                  </View>
+                  <Badge label={item.status.toUpperCase()} variant="primary" size="sm" />
+                </View>
+              ))
+            )}
+          </View>
+        </View>
+
+        {/* 7 MANAGER NAVIGATION MODULES */}
+        <Text style={[styles.sectionHeader, { marginTop: spacing.xl }]}>
+          Property Operations ({managerModules.length})
+        </Text>
+        <Text style={styles.sectionSubtitle}>
+          Daily operational modules assigned to your property
         </Text>
 
         <View style={styles.modulesGrid}>
@@ -308,15 +501,18 @@ const styles = StyleSheet.create({
   logoutBtn: {
     flexDirection: 'row',
     alignItems: 'center',
+    backgroundColor: colors.surfaceSubtle,
     paddingHorizontal: spacing.sm,
-    paddingVertical: 5,
+    paddingVertical: 6,
     borderRadius: borderRadius.md,
-    backgroundColor: '#F1F5F9',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
   },
   logoutBtnText: {
     ...typography.captionMedium,
     color: colors.textSecondary,
     marginLeft: 4,
+    fontWeight: '600',
   },
   assignedBanner: {
     flexDirection: 'row',
@@ -333,7 +529,7 @@ const styles = StyleSheet.create({
     width: 44,
     height: 44,
     borderRadius: borderRadius.md,
-    backgroundColor: '#D1FAE5',
+    backgroundColor: '#ECFDF5',
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: spacing.sm,
@@ -343,26 +539,56 @@ const styles = StyleSheet.create({
   },
   bannerTag: {
     ...typography.caption,
-    color: '#065F46',
+    color: '#059669',
     fontSize: 10,
-    fontWeight: '700',
+    fontWeight: '800',
     letterSpacing: 0.5,
   },
   bannerTitle: {
     ...typography.subtitle1,
     color: colors.textPrimary,
     fontWeight: '800',
+    marginTop: 2,
   },
   managerNotice: {
     ...typography.caption,
-    color: colors.textMuted,
-    marginTop: 1,
+    color: colors.textSecondary,
+    fontSize: 11,
+    marginTop: 2,
+  },
+  mainSectionLayout: {
+    flexDirection: 'column',
+    gap: 16,
+  },
+  mainDesktopLayout: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+  },
+  metricsCol: {
+    flex: 1,
+  },
+  metricsDesktopCol: {
+    flex: 1.1,
+  },
+  calendarCol: {
+    flex: 1,
+  },
+  calendarDesktopCol: {
+    flex: 1.35,
+  },
+  sectionHeaderRow: {
+    marginBottom: spacing.sm,
   },
   sectionHeader: {
     ...typography.h3,
     color: colors.textPrimary,
-    marginBottom: spacing.sm,
-    paddingHorizontal: 2,
+    fontWeight: '700',
+  },
+  sectionSubtitle: {
+    fontSize: 12,
+    color: colors.textSecondary,
+    marginTop: 2,
+    marginBottom: spacing.xs,
   },
   kpiGrid: {
     flexDirection: 'row',
@@ -373,8 +599,90 @@ const styles = StyleSheet.create({
     width: '50%',
     padding: spacing.xs,
   },
+  financialRow: {
+    flexDirection: 'row',
+    marginHorizontal: -spacing.xs,
+    marginTop: spacing.xs,
+  },
+  finCol: {
+    flex: 1,
+    padding: spacing.xs,
+  },
+  operationsSection: {
+    marginTop: spacing.lg,
+  },
+  opsTabRow: {
+    flexDirection: 'row',
+    backgroundColor: '#F1F5F9',
+    borderRadius: borderRadius.md,
+    padding: 3,
+    marginBottom: spacing.sm,
+  },
+  opsTab: {
+    flex: 1,
+    paddingVertical: 8,
+    alignItems: 'center',
+    borderRadius: borderRadius.sm,
+  },
+  opsTabActive: {
+    backgroundColor: '#FFFFFF',
+    ...shadows.sm,
+  },
+  opsTabText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: colors.textSecondary,
+  },
+  opsTabTextActive: {
+    color: colors.primaryNavy,
+    fontWeight: '700',
+  },
+  opsContentCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: borderRadius.lg,
+    padding: spacing.md,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    ...shadows.sm,
+  },
+  opsEmptyText: {
+    textAlign: 'center',
+    color: colors.textMuted,
+    fontSize: 13,
+    paddingVertical: 16,
+  },
+  opsListItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F8FAFC',
+  },
+  opsIconCircle: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#ECFDF5',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  opsItemInfo: {
+    flex: 1,
+  },
+  opsItemTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: colors.textPrimary,
+  },
+  opsItemSub: {
+    fontSize: 12,
+    color: colors.textSecondary,
+    marginTop: 2,
+  },
   modulesGrid: {
     gap: spacing.sm,
+    marginTop: spacing.sm,
   },
   moduleCard: {
     flexDirection: 'row',

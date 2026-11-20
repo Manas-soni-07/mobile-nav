@@ -38,7 +38,7 @@ export const CheckInRoomsModal: React.FC<CheckInRoomsModalProps> = ({
   const [selectedArrivalId, setSelectedArrivalId] = useState<string | null>(null);
   const [selectedRoomId, setSelectedRoomId] = useState<string | null>(null);
 
-  const handleProcessCheckIn = (bookingId: string) => {
+  const handleProcessCheckIn = async (bookingId: string) => {
     // If room already assigned or user picked one
     const arrival = todayArrivals.find((a) => a.id === bookingId);
     if (!arrival) return;
@@ -53,15 +53,15 @@ export const CheckInRoomsModal: React.FC<CheckInRoomsModalProps> = ({
       return;
     }
 
-    const success = checkInGuest(bookingId, targetRoomId);
+    const success = await checkInGuest(bookingId, targetRoomId);
     if (success) {
       setSelectedArrivalId(null);
       setSelectedRoomId(null);
     }
   };
 
-  const handleProcessCheckOut = (bookingId: string) => {
-    checkOutGuest(bookingId);
+  const handleProcessCheckOut = async (bookingId: string) => {
+    await checkOutGuest(bookingId);
   };
 
   return (

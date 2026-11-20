@@ -128,7 +128,7 @@ export const InRoomDiningScreen: React.FC = () => {
     });
   };
 
-  const handleFireKOT = () => {
+  const handleFireKOT = async () => {
     if (!selectedRoomNumber) {
       Alert.alert('No Room Selected', 'Please select an occupied room for delivery.');
       return;
@@ -141,7 +141,7 @@ export const InRoomDiningScreen: React.FC = () => {
     const targetRoom = occupiedRooms.find((r) => r.roomNumber === selectedRoomNumber);
     const guestName = targetRoom?.currentGuestName || 'Valued Guest';
 
-    const newOrder = createDiningOrder({
+    const newOrder = await createDiningOrder({
       hotelId: selectedHotel.id,
       roomNumber: selectedRoomNumber,
       guestName,

@@ -94,7 +94,7 @@ export const ConciergeDispatchScreen: React.FC = () => {
   }, [conciergeBookings, searchQuery, statusFilter]);
 
   // Handle Dispatch Creation
-  const handleCreateDispatch = () => {
+  const handleCreateDispatch = async () => {
     if (!selectedRoomNumber) {
       Alert.alert('No Room Selected', 'Please select an occupied room.');
       return;
@@ -108,7 +108,7 @@ export const ConciergeDispatchScreen: React.FC = () => {
     const guestName = targetRoom?.currentGuestName || 'Valued Guest';
     const numberOfGuests = parseInt(guestCountStr, 10) || 1;
 
-    const newBooking = createConciergeBooking({
+    const newBooking = await createConciergeBooking({
       hotelId: selectedHotel.id,
       roomNumber: selectedRoomNumber,
       guestName,

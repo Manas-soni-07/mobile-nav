@@ -26,6 +26,7 @@ export type IconName =
   | 'eye-off'
   | 'lock'
   | 'mail'
+  | 'chevron-left'
   | 'chevron-right'
   | 'chevron-down'
   | 'arrow-left'
@@ -618,6 +619,23 @@ export const Icon: React.FC<IconProps> = ({
                 height: strokeWidth,
                 backgroundColor: color,
                 transform: [{ rotate: '-45deg' }],
+              }}
+            />
+          </View>
+        );
+
+      case 'chevron-left':
+        return (
+          <View style={{ width: size, height: size, alignItems: 'center', justifyContent: 'center' }}>
+            <View
+              style={{
+                width: size * 0.35,
+                height: size * 0.35,
+                borderBottomWidth: strokeWidth * 1.2,
+                borderLeftWidth: strokeWidth * 1.2,
+                borderColor: color,
+                transform: [{ rotate: '45deg' }],
+                marginLeft: 2,
               }}
             />
           </View>

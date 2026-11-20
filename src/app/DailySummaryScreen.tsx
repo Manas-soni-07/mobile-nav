@@ -68,7 +68,7 @@ export const DailySummaryScreen: React.FC = () => {
     const todayCheckIns = targetBookings.filter(
       (b) => b.status === 'checked_in' || b.status === 'confirmed'
     ).length;
-    const todayCheckOuts = targetBookings.filter((b) => b.status === 'checked_out').length || 4;
+    const todayCheckOuts = targetBookings.filter((b) => b.status === 'checked_out').length;
 
     // Financial calculations
     const roomRevenue = targetRooms

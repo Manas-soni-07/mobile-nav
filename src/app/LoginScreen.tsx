@@ -82,6 +82,7 @@ export const LoginScreen: React.FC = () => {
   };
 
   const handleLogin = async () => {
+    if (loading) return;
     if (!validate()) return;
 
     setLoading(true);

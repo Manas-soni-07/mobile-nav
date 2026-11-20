@@ -333,6 +333,7 @@ export interface DashboardKPIs {
   maintenanceRooms: number;
   todayCheckIns: number;
   todayCheckOuts: number;
+  todayBookings: number;
   occupancyPercentage: number;
 }
 

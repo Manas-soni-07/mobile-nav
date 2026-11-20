@@ -1,7 +1,7 @@
 /**
  * ResortOS - Admin Dashboard & Control Console
  * Consolidated and Property-Specific Oversight for THE VILLA and NAVKAR PALACE & RESORT.
- * Displays 10 core metrics, Hotel Selector (All / The Villa / Navkar), and 14 Admin Modules.
+ * Displays 6 Core Operational Metrics, Interactive Dashboard Calendar, and 14 Admin Modules.
  */
 
 import React, { useState, useMemo } from 'react';
@@ -12,6 +12,7 @@ import {
   ScrollView,
   TouchableOpacity,
   SafeAreaView,
+  useWindowDimensions,
 } from 'react-native';
 import { colors } from '../theme/colors';
 import { typography } from '../theme/typography';
@@ -23,10 +24,14 @@ import { Card } from '../components/common/Card';
 import { Badge } from '../components/common/Badge';
 import { Icon, IconName } from '../components/common/Icon';
 import { KPICard } from '../components/dashboard/KPICard';
+import { DashboardCalendar } from '../components/dashboard/DashboardCalendar';
 import { formatCurrency } from '../utils/formatters';
 
 export const AdminDashboardScreen: React.FC = () => {
   const { navigate } = useNavigation();
+  const { width } = useWindowDimensions();
+  const isDesktop = width >= 1024;
+
   const {
     hotels,
     selectedHotelId,
@@ -41,31 +46,74 @@ export const AdminDashboardScreen: React.FC = () => {
   // Hotel selector: 'all', 'h-villa', 'h-navkar'
   const [filterHotelId, setFilterHotelId] = useState<string>('all');
   const [showPicker, setShowPicker] = useState<boolean>(false);
+  const [activeBottomTab, setActiveBottomTab] = useState<'checkins' | 'checkouts' | 'recent'>('checkins');
+
+  // Indian standard date
+  const todayStr = useMemo(() => {
+    try {
+      const formatter = new Intl.DateTimeFormat('en-CA', {
+        timeZone: 'Asia/Kolkata',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+      });
+      return formatter.format(new Date());
+    } catch {
+      return new Date().toISOString().split('T')[0];
+    }
+  }, []);
 
   // Compute metrics based on selected hotel filter
-  const metrics = useMemo(() => {
-    const isAll = filterHotelId === 'all';
-    const targetRooms = isAll ? rooms : rooms.filter((r) => r.hotelId === filterHotelId);
-    const targetBookings = isAll ? bookings : bookings.filter((b) => b.hotelId === filterHotelId);
-    const targetExpenses = isAll ? expenses : expenses.filter((e) => e.hotelId === filterHotelId);
-    const targetFolios = isAll ? folios : folios.filter((f) => f.hotelId === filterHotelId);
+  const isAll = filterHotelId === 'all';
+  const targetRooms = useMemo(
+    () => (isAll ? rooms : rooms.filter((r) => r.hotelId === filterHotelId)),
+    [isAll, rooms, filterHotelId]
+  );
+  const targetBookings = useMemo(
+    () => (isAll ? bookings : bookings.filter((b) => b.hotelId === filterHotelId)),
+    [isAll, bookings, filterHotelId]
+  );
+  const targetExpenses = useMemo(
+    () => (isAll ? expenses : expenses.filter((e) => e.hotelId === filterHotelId)),
+    [isAll, expenses, filterHotelId]
+  );
+  const targetFolios = useMemo(
+    () => (isAll ? folios : folios.filter((f) => f.hotelId === filterHotelId)),
+    [isAll, folios, filterHotelId]
+  );
 
+  const metrics = useMemo(() => {
     const totalHotels = isAll ? hotels.length : 1;
-    const totalRooms = isAll ? 55 : targetRooms.length; // 20 for Villa + 35 for Navkar
-    const availableRooms = targetRooms.filter((r) => r.status === 'available').length;
+    // Exactly 70 for Navkar Palace, 15 for The Villa, 85 for Consolidated
+    const totalRooms = targetRooms.length;
     const occupiedRooms = targetRooms.filter((r) => r.status === 'occupied').length;
     const cleaningRooms = targetRooms.filter((r) => r.status === 'cleaning').length;
+    const maintenanceRooms = targetRooms.filter((r) => r.status === 'maintenance').length;
+    const availableRooms = Math.max(0, totalRooms - (occupiedRooms + cleaningRooms + maintenanceRooms));
 
-    // Today's Check-ins & Check-outs
-    const todayStr = '2026-11-16';
-    const todayCheckIns = targetBookings.filter((b) => b.checkInDate <= todayStr && b.status === 'confirmed').length || 2;
-    const todayCheckOuts = targetBookings.filter((b) => b.checkOutDate <= todayStr).length || 1;
-    const todayBookings = targetBookings.length;
+    // Today's Check-ins: Actual check-in events scheduled/performed for today's date
+    const todayCheckIns = targetBookings.filter(
+      (b) => b.checkInDate === todayStr && b.status !== 'cancelled'
+    ).length;
+
+    // Today's Check-outs: Actual check-out events scheduled/performed for today's date
+    const todayCheckOuts = targetBookings.filter(
+      (b) => b.checkOutDate === todayStr && b.status !== 'cancelled'
+    ).length;
+
+    // Today's Bookings: Bookings created or scheduled for today's date
+    const todayBookings = targetBookings.filter(
+      (b) => (b.createdAt === todayStr || b.checkInDate === todayStr) && b.status !== 'cancelled'
+    ).length;
 
     // Financial calculations (INR)
-    const totalCollections = targetFolios.reduce((acc, f) => acc + (f.paidAmount || 0), 0) + (isAll ? 78500 : 35000);
-    const pendingPayments = targetFolios.reduce((acc, f) => acc + (f.balanceDue || 0), 0) + (isAll ? 24500 : 12000);
-    const totalExpenses = targetExpenses.reduce((acc, e) => acc + (e.amount || 0), 0) + (isAll ? 16200 : 8500);
+    const totalCollections = targetFolios
+      .filter((f) => f.status === 'settled' || (f.paidAmount && f.paidAmount > 0))
+      .reduce((acc, f) => acc + (f.paidAmount || 0), 0);
+    const pendingPayments = targetFolios
+      .filter((f) => f.status === 'open' && f.balanceDue > 0)
+      .reduce((acc, f) => acc + (f.balanceDue || 0), 0);
+    const totalExpenses = targetExpenses.reduce((acc, e) => acc + (e.amount || 0), 0);
 
     return {
       totalHotels,
@@ -73,6 +121,7 @@ export const AdminDashboardScreen: React.FC = () => {
       availableRooms,
       occupiedRooms,
       cleaningRooms,
+      maintenanceRooms,
       todayCheckIns,
       todayCheckOuts,
       todayBookings,
@@ -80,7 +129,7 @@ export const AdminDashboardScreen: React.FC = () => {
       pendingPayments,
       totalExpenses,
     };
-  }, [filterHotelId, rooms, bookings, expenses, folios, hotels.length]);
+  }, [isAll, targetRooms, targetBookings, targetExpenses, targetFolios, hotels.length, todayStr]);
 
   const handleSelectHotelFilter = (id: string) => {
     setFilterHotelId(id);
@@ -90,6 +139,25 @@ export const AdminDashboardScreen: React.FC = () => {
     setShowPicker(false);
   };
 
+  // Filtered operational lists for bottom section
+  const todayCheckInList = useMemo(() => {
+    return targetBookings.filter(
+      (b) => b.checkInDate === todayStr && b.status !== 'cancelled'
+    );
+  }, [targetBookings, todayStr]);
+
+  const todayCheckOutList = useMemo(() => {
+    return targetBookings.filter(
+      (b) => b.checkOutDate === todayStr && b.status !== 'cancelled'
+    );
+  }, [targetBookings, todayStr]);
+
+  const recentBookingsList = useMemo(() => {
+    return [...targetBookings]
+      .filter((b) => b.status !== 'cancelled')
+      .slice(0, 5);
+  }, [targetBookings]);
+
   // 14 Admin Navigation Modules
   const adminModules: { id: string; title: string; subtitle: string; icon: IconName; screen: any; color: string }[] = [
     {
@@ -98,20 +166,20 @@ export const AdminDashboardScreen: React.FC = () => {
       subtitle: 'Create, edit & manage both properties',
       icon: 'hotel',
       screen: 'hotels',
-      color: colors.primaryNavy,
+      color: '#0F2942',
     },
     {
-      id: 'mod-managers',
-      title: '2. Manager Management',
-      subtitle: 'Assign 1 Manager per hotel & passwords',
+      id: 'mod-users',
+      title: '2. User / Staff Management',
+      subtitle: 'Manage Managers, Staff & role access',
       icon: 'users',
-      screen: 'managers',
-      color: '#047857',
+      screen: 'staff',
+      color: '#1E3A8A',
     },
     {
       id: 'mod-rooms',
-      title: '3. Room Management',
-      subtitle: 'Inventory: Available, Reserved, Cleaning',
+      title: '3. Room Master & Inventory',
+      subtitle: 'Room configuration, pricing & amenities',
       icon: 'grid',
       screen: 'rooms',
       color: '#0284C7',
@@ -119,82 +187,82 @@ export const AdminDashboardScreen: React.FC = () => {
     {
       id: 'mod-advance-booking',
       title: '4. Advance Booking',
-      subtitle: 'Room Bookings & Event Allocations',
+      subtitle: 'Manage normal & wedding event bookings',
       icon: 'calendar',
       screen: 'advance-booking',
       color: '#7C3AED',
     },
     {
-      id: 'mod-checkin-checkout',
-      title: '5. Check-in / Check-out',
-      subtitle: 'Walk-in guest check-in & checkout billing',
+      id: 'mod-checkin',
+      title: '5. Check-In & Check-Out',
+      subtitle: 'Front desk, walk-in & room status',
       icon: 'log-in',
       screen: 'checkin-rooms',
       color: '#059669',
     },
     {
       id: 'mod-billing',
-      title: '6. Billing & Payments',
-      subtitle: 'Collections: Cash, UPI, Card tracking',
+      title: '6. Billing & Folios',
+      subtitle: 'Guest billing, invoices, GST & payments',
       icon: 'credit-card',
       screen: 'billing',
-      color: '#D97706',
-    },
-    {
-      id: 'mod-staff',
-      title: '7. Staff Management',
-      subtitle: 'Employee profiles & monthly salaries',
-      icon: 'user-check',
-      screen: 'staff',
-      color: '#4F46E5',
-    },
-    {
-      id: 'mod-attendance',
-      title: '8. Attendance',
-      subtitle: 'Daily staff checklist: Present, Absent, Half',
-      icon: 'clock',
-      screen: 'attendance',
-      color: '#2563EB',
-    },
-    {
-      id: 'mod-salaries',
-      title: '9. Salary Management',
-      subtitle: 'Attendance-based salary calculations',
-      icon: 'dollar-sign',
-      screen: 'salaries',
       color: '#16A34A',
     },
     {
-      id: 'mod-salary-advances',
-      title: '10. Salary Advances',
-      subtitle: 'Record advance loans & auto-deductions',
-      icon: 'arrow-down-circle',
-      screen: 'salary-advances',
-      color: '#DC2626',
+      id: 'mod-attendance',
+      title: '7. Staff Attendance',
+      subtitle: 'Daily roster, biometric & check-in times',
+      icon: 'user-check',
+      screen: 'staff-attendance',
+      color: '#D97706',
     },
     {
       id: 'mod-expenses',
-      title: '11. Other Expenses',
-      subtitle: 'Electricity, water, repairs, supplies',
+      title: '8. Daily Expenses',
+      subtitle: 'Vendor bills, maintenance & petty cash',
       icon: 'trending-down',
       screen: 'daily-expenses',
+      color: '#DC2626',
+    },
+    {
+      id: 'mod-banquets',
+      title: '9. Banquets & Lawns',
+      subtitle: 'Wedding bookings, catering & venue status',
+      icon: 'calendar',
+      screen: 'banquets',
+      color: '#9333EA',
+    },
+    {
+      id: 'mod-dining',
+      title: '10. Restaurant & POS Dining',
+      subtitle: 'Table orders, KOT & 24/7 Room Service',
+      icon: 'receipt',
+      screen: 'dining',
       color: '#EA580C',
     },
     {
-      id: 'mod-reports',
-      title: '12. Daily Summary Reports',
-      subtitle: 'Hotel-wise revenue, collections & profit',
-      icon: 'bar-chart-2',
-      screen: 'daily-summary',
+      id: 'mod-housekeeping',
+      title: '11. Housekeeping & Maintenance',
+      subtitle: 'Cleaning tickets, turn-down & work orders',
+      icon: 'activity',
+      screen: 'housekeeping',
       color: '#0891B2',
     },
     {
-      id: 'mod-cloud-sync',
-      title: '13. TiDB Cloud Sync',
-      subtitle: 'AWS Tokyo live database synchronization',
-      icon: 'database',
-      screen: 'cloud-sync',
-      color: '#4338CA',
+      id: 'mod-spa',
+      title: '12. Spa & Excursions',
+      subtitle: 'Ayurvedic treatments & concierge tours',
+      icon: 'shield',
+      screen: 'spa-excursions',
+      color: '#0D9488',
+    },
+    {
+      id: 'mod-reports',
+      title: '13. Reports & Analytics',
+      subtitle: 'Consolidated revenue, RevPAR, ADR & audit',
+      icon: 'bar-chart-2',
+      screen: 'reports',
+      color: '#3B82F6',
     },
     {
       id: 'mod-settings',
@@ -208,16 +276,16 @@ export const AdminDashboardScreen: React.FC = () => {
 
   const currentHotelLabel =
     filterHotelId === 'all'
-      ? 'All Hotels (Consolidated)'
+      ? 'All Hotels (Consolidated View)'
       : filterHotelId === 'h-villa'
-      ? 'THE VILLA (Jaipur)'
-      : 'NAVKAR PALACE & RESORT (Udaipur)';
+      ? 'THE VILLA (Jaipur - 15 Rooms)'
+      : 'NAVKAR PALACE HOTEL & RESORT (Udaipur - 70 Rooms)';
 
   return (
     <SafeAreaView style={styles.safeArea}>
       <Header
         title="Admin Control Center"
-        subtitle="Executive Owner Oversight"
+        subtitle="Executive Hotel Management & Real-Time Oversight"
         hotelBadge="ADMIN ACCESS"
         rightAction={
           <TouchableOpacity
@@ -227,7 +295,11 @@ export const AdminDashboardScreen: React.FC = () => {
           >
             <Icon name="filter" size={14} color={colors.primaryNavy} />
             <Text style={styles.pickerTriggerText} numberOfLines={1}>
-              {filterHotelId === 'all' ? 'All Hotels' : filterHotelId === 'h-villa' ? 'The Villa' : 'Navkar'}
+              {filterHotelId === 'all'
+                ? 'All Hotels'
+                : filterHotelId === 'h-villa'
+                ? 'The Villa (15)'
+                : 'Navkar Palace (70)'}
             </Text>
             <Icon name="chevron-down" size={14} color={colors.primaryNavy} />
           </TouchableOpacity>
@@ -237,24 +309,14 @@ export const AdminDashboardScreen: React.FC = () => {
       {/* Hotel Selector Dropdown Modal / Strip */}
       {showPicker && (
         <View style={styles.dropdownContainer}>
-          <Text style={styles.dropdownTitle}>SELECT HOTEL VIEW:</Text>
+          <Text style={styles.dropdownTitle}>SWITCH HOTEL VIEW:</Text>
           <TouchableOpacity
             style={[styles.dropdownItem, filterHotelId === 'all' && styles.dropdownItemSelected]}
             onPress={() => handleSelectHotelFilter('all')}
           >
             <Icon name="globe" size={16} color={filterHotelId === 'all' ? colors.primaryNavy : colors.textSecondary} />
             <Text style={[styles.dropdownText, filterHotelId === 'all' && styles.dropdownTextSelected]}>
-              All Hotels (Consolidated View)
-            </Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[styles.dropdownItem, filterHotelId === 'h-villa' && styles.dropdownItemSelected]}
-            onPress={() => handleSelectHotelFilter('h-villa')}
-          >
-            <Icon name="hotel" size={16} color={filterHotelId === 'h-villa' ? colors.primaryNavy : colors.textSecondary} />
-            <Text style={[styles.dropdownText, filterHotelId === 'h-villa' && styles.dropdownTextSelected]}>
-              THE VILLA (Civil Lines, Jaipur)
+              All Hotels (Consolidated View • 85 Total Rooms)
             </Text>
           </TouchableOpacity>
 
@@ -264,7 +326,17 @@ export const AdminDashboardScreen: React.FC = () => {
           >
             <Icon name="hotel" size={16} color={filterHotelId === 'h-navkar' ? colors.primaryNavy : colors.textSecondary} />
             <Text style={[styles.dropdownText, filterHotelId === 'h-navkar' && styles.dropdownTextSelected]}>
-              NAVKAR PALACE & RESORT (NH-48, Udaipur)
+              Navkar Palace Hotel & Resort (Udaipur • Exactly 70 Rooms)
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.dropdownItem, filterHotelId === 'h-villa' && styles.dropdownItemSelected]}
+            onPress={() => handleSelectHotelFilter('h-villa')}
+          >
+            <Icon name="hotel" size={16} color={filterHotelId === 'h-villa' ? colors.primaryNavy : colors.textSecondary} />
+            <Text style={[styles.dropdownText, filterHotelId === 'h-villa' && styles.dropdownTextSelected]}>
+              The Villa (Civil Lines, Jaipur • Exactly 15 Rooms)
             </Text>
           </TouchableOpacity>
         </View>
@@ -277,134 +349,256 @@ export const AdminDashboardScreen: React.FC = () => {
             <Icon name="layers" size={20} color={colors.primaryNavy} />
           </View>
           <View style={styles.bannerInfo}>
-            <Text style={styles.bannerLabel}>CURRENT REPORTING SCOPE</Text>
+            <Text style={styles.bannerLabel}>ACTIVE HOTEL VIEW</Text>
             <Text style={styles.bannerScope}>{currentHotelLabel}</Text>
           </View>
           <Badge
-            label={filterHotelId === 'all' ? 'CONSOLIDATED' : 'PROPERTY'}
+            label={filterHotelId === 'all' ? '85 ROOMS' : filterHotelId === 'h-navkar' ? '70 ROOMS' : '15 ROOMS'}
             variant="primary"
             size="sm"
           />
         </View>
 
-        {/* 10 CORE METRICS (SECTION 5 MANDATE) */}
-        <Text style={styles.sectionHeader}>Operational & Financial KPIs</Text>
+        {/* ============================================================== */}
+        {/* UPPER SECTION: OPERATIONAL METRICS (LEFT) + CALENDAR (RIGHT)   */}
+        {/* ============================================================== */}
+        <View style={[styles.mainSectionLayout, isDesktop && styles.mainDesktopLayout]}>
+          {/* Left Column: Today's 6 Operational Metrics */}
+          <View style={[styles.metricsCol, isDesktop && styles.metricsDesktopCol]}>
+            <View style={styles.sectionHeaderRow}>
+              <View>
+                <Text style={styles.sectionHeader}>Today's Operational Metrics</Text>
+                <Text style={styles.sectionSubtitle}>
+                  Calculated dynamically from database records ({todayStr})
+                </Text>
+              </View>
+            </View>
 
-        <View style={styles.kpiGrid}>
-          {/* Card 1: Total Hotels */}
-          <View style={styles.kpiCol}>
-            <KPICard
-              title="Total Hotels"
-              value={metrics.totalHotels.toString()}
-              icon="hotel"
-              accentColor={colors.primaryNavy}
-              onPress={() => navigate('hotels')}
-            />
+            {/* 6 Independent Operational Metric Cards */}
+            <View style={styles.kpiGrid}>
+              {/* Card 1: Total Rooms */}
+              <View style={styles.kpiCol}>
+                <KPICard
+                  title="Total Rooms"
+                  value={metrics.totalRooms.toString()}
+                  icon="grid"
+                  accentColor="#0284C7"
+                  subtitle={filterHotelId === 'h-navkar' ? '70 Active Rooms' : filterHotelId === 'h-villa' ? '15 Active Rooms' : '85 Active Rooms'}
+                  onPress={() => navigate('rooms')}
+                />
+              </View>
+
+              {/* Card 2: Available Rooms */}
+              <View style={styles.kpiCol}>
+                <KPICard
+                  title="Available Rooms"
+                  value={metrics.availableRooms.toString()}
+                  icon="check-circle"
+                  accentColor={colors.success}
+                  subtitle="Vacant & Ready"
+                  onPress={() => navigate('rooms')}
+                />
+              </View>
+
+              {/* Card 3: Occupied Rooms */}
+              <View style={styles.kpiCol}>
+                <KPICard
+                  title="Occupied Rooms"
+                  value={metrics.occupiedRooms.toString()}
+                  icon="user-check"
+                  accentColor="#4F46E5"
+                  subtitle="In-House Stays"
+                  onPress={() => navigate('rooms')}
+                />
+              </View>
+
+              {/* Card 4: Today's Check-ins */}
+              <View style={styles.kpiCol}>
+                <KPICard
+                  title="Today's Check-ins"
+                  value={metrics.todayCheckIns.toString()}
+                  icon="log-in"
+                  accentColor="#059669"
+                  subtitle="Scheduled Arrivals"
+                  onPress={() => navigate('checkin-rooms')}
+                />
+              </View>
+
+              {/* Card 5: Today's Check-outs */}
+              <View style={styles.kpiCol}>
+                <KPICard
+                  title="Today's Check-outs"
+                  value={metrics.todayCheckOuts.toString()}
+                  icon="log-out"
+                  accentColor="#D97706"
+                  subtitle="Departures Due"
+                  onPress={() => navigate('checkin-rooms')}
+                />
+              </View>
+
+              {/* Card 6: Today's Bookings */}
+              <View style={styles.kpiCol}>
+                <KPICard
+                  title="Today's Bookings"
+                  value={metrics.todayBookings.toString()}
+                  icon="calendar"
+                  accentColor="#7C3AED"
+                  subtitle="Created / Arriving Today"
+                  onPress={() => navigate('advance-booking')}
+                />
+              </View>
+            </View>
+
+            {/* Financial Overview Cards */}
+            <View style={styles.financialRow}>
+              <View style={styles.finCol}>
+                <KPICard
+                  title="Collections"
+                  value={formatCurrency(metrics.totalCollections)}
+                  icon="credit-card"
+                  accentColor="#16A34A"
+                  subtitle="Settled Revenue"
+                  onPress={() => navigate('billing')}
+                />
+              </View>
+              <View style={styles.finCol}>
+                <KPICard
+                  title="Pending Due"
+                  value={formatCurrency(metrics.pendingPayments)}
+                  icon="alert-circle"
+                  accentColor="#DC2626"
+                  subtitle="Unpaid Folios"
+                  onPress={() => navigate('billing')}
+                />
+              </View>
+              <View style={styles.finCol}>
+                <KPICard
+                  title="Expenses"
+                  value={formatCurrency(metrics.totalExpenses)}
+                  icon="trending-down"
+                  accentColor="#EA580C"
+                  subtitle="Operational Outflow"
+                  onPress={() => navigate('daily-expenses')}
+                />
+              </View>
+            </View>
           </View>
 
-          {/* Card 2: Total Rooms */}
-          <View style={styles.kpiCol}>
-            <KPICard
-              title="Total Rooms"
-              value={metrics.totalRooms.toString()}
-              icon="grid"
-              accentColor="#0284C7"
-              onPress={() => navigate('rooms')}
-            />
-          </View>
-
-          {/* Card 3: Available Rooms */}
-          <View style={styles.kpiCol}>
-            <KPICard
-              title="Available Rooms"
-              value={metrics.availableRooms.toString()}
-              icon="check-circle"
-              accentColor={colors.success}
-              onPress={() => navigate('rooms')}
-            />
-          </View>
-
-          {/* Card 4: Occupied Rooms */}
-          <View style={styles.kpiCol}>
-            <KPICard
-              title="Occupied Rooms"
-              value={metrics.occupiedRooms.toString()}
-              icon="user-check"
-              accentColor="#4F46E5"
-              onPress={() => navigate('rooms')}
-            />
-          </View>
-
-          {/* Card 5: Today's Check-ins */}
-          <View style={styles.kpiCol}>
-            <KPICard
-              title="Today's Check-ins"
-              value={metrics.todayCheckIns.toString()}
-              icon="log-in"
-              accentColor="#059669"
-              onPress={() => navigate('checkin-rooms')}
-            />
-          </View>
-
-          {/* Card 6: Today's Check-outs */}
-          <View style={styles.kpiCol}>
-            <KPICard
-              title="Today's Check-outs"
-              value={metrics.todayCheckOuts.toString()}
-              icon="log-out"
-              accentColor="#D97706"
-              onPress={() => navigate('checkin-rooms')}
-            />
-          </View>
-
-          {/* Card 7: Today's Bookings */}
-          <View style={styles.kpiCol}>
-            <KPICard
-              title="Total Bookings"
-              value={metrics.todayBookings.toString()}
-              icon="calendar"
-              accentColor="#7C3AED"
-              onPress={() => navigate('advance-booking')}
-            />
-          </View>
-
-          {/* Card 8: Today's Collections (INR) */}
-          <View style={styles.kpiCol}>
-            <KPICard
-              title="Total Collections"
-              value={formatCurrency(metrics.totalCollections)}
-              icon="credit-card"
-              accentColor="#16A34A"
-              onPress={() => navigate('billing')}
-            />
-          </View>
-
-          {/* Card 9: Pending Payments (INR) */}
-          <View style={styles.kpiCol}>
-            <KPICard
-              title="Pending Payments"
-              value={formatCurrency(metrics.pendingPayments)}
-              icon="alert-circle"
-              accentColor="#DC2626"
-              onPress={() => navigate('billing')}
-            />
-          </View>
-
-          {/* Card 10: Total Expenses (INR) */}
-          <View style={styles.kpiCol}>
-            <KPICard
-              title="Total Expenses"
-              value={formatCurrency(metrics.totalExpenses)}
-              icon="trending-down"
-              accentColor="#EA580C"
-              onPress={() => navigate('daily-expenses')}
+          {/* Right Column: Modern Interactive Dashboard Calendar */}
+          <View style={[styles.calendarCol, isDesktop && styles.calendarDesktopCol]}>
+            <DashboardCalendar
+              hotelId={filterHotelId}
+              hotelName={filterHotelId === 'all' ? 'All Managed Hotels' : filterHotelId === 'h-villa' ? 'The Villa' : 'Navkar Palace'}
+              bookings={targetBookings}
+              rooms={targetRooms}
+              onSelectBooking={(b) => navigate('checkin-rooms')}
+              onSelectRoom={(r) => navigate('rooms')}
             />
           </View>
         </View>
 
-        {/* 14 ADMIN NAVIGATION MODULES (SECTION 5 MANDATE) */}
-        <Text style={[styles.sectionHeader, { marginTop: spacing.lg }]}>
+        {/* ============================================================== */}
+        {/* BELOW SECTION: RECENT BOOKINGS / TODAY'S CHECK-INS & CHECK-OUTS*/}
+        {/* ============================================================== */}
+        <View style={styles.operationsSection}>
+          <View style={styles.opsTabRow}>
+            <TouchableOpacity
+              style={[styles.opsTab, activeBottomTab === 'checkins' && styles.opsTabActive]}
+              onPress={() => setActiveBottomTab('checkins')}
+            >
+              <Text style={[styles.opsTabText, activeBottomTab === 'checkins' && styles.opsTabTextActive]}>
+                Today's Check-ins ({todayCheckInList.length})
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.opsTab, activeBottomTab === 'checkouts' && styles.opsTabActive]}
+              onPress={() => setActiveBottomTab('checkouts')}
+            >
+              <Text style={[styles.opsTabText, activeBottomTab === 'checkouts' && styles.opsTabTextActive]}>
+                Today's Check-outs ({todayCheckOutList.length})
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.opsTab, activeBottomTab === 'recent' && styles.opsTabActive]}
+              onPress={() => setActiveBottomTab('recent')}
+            >
+              <Text style={[styles.opsTabText, activeBottomTab === 'recent' && styles.opsTabTextActive]}>
+                Recent Bookings ({recentBookingsList.length})
+              </Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* Tab Content List */}
+          <View style={styles.opsContentCard}>
+            {activeBottomTab === 'checkins' && (
+              todayCheckInList.length === 0 ? (
+                <Text style={styles.opsEmptyText}>No check-ins scheduled for today.</Text>
+              ) : (
+                todayCheckInList.map((item) => (
+                  <View key={item.id} style={styles.opsListItem}>
+                    <View style={styles.opsIconCircle}>
+                      <Icon name="log-in" size={16} color="#059669" />
+                    </View>
+                    <View style={styles.opsItemInfo}>
+                      <Text style={styles.opsItemTitle}>{item.guestName}</Text>
+                      <Text style={styles.opsItemSub}>
+                        Room {item.roomNumber || 'TBD'} • {item.guestPhone} • {item.numberOfGuests} Guests
+                      </Text>
+                    </View>
+                    <Badge label={item.status.toUpperCase()} variant="success" size="sm" />
+                  </View>
+                ))
+              )
+            )}
+
+            {activeBottomTab === 'checkouts' && (
+              todayCheckOutList.length === 0 ? (
+                <Text style={styles.opsEmptyText}>No check-outs scheduled for today.</Text>
+              ) : (
+                todayCheckOutList.map((item) => (
+                  <View key={item.id} style={styles.opsListItem}>
+                    <View style={[styles.opsIconCircle, { backgroundColor: '#FEF3C7' }]}>
+                      <Icon name="log-out" size={16} color="#D97706" />
+                    </View>
+                    <View style={styles.opsItemInfo}>
+                      <Text style={styles.opsItemTitle}>{item.guestName}</Text>
+                      <Text style={styles.opsItemSub}>
+                        Room {item.roomNumber || 'TBD'} • {item.guestPhone} • Total ₹{item.totalAmount.toLocaleString('en-IN')}
+                      </Text>
+                    </View>
+                    <Badge label={item.paymentStatus === 'paid' ? 'PAID' : 'DUE'} variant={item.paymentStatus === 'paid' ? 'success' : 'warning'} size="sm" />
+                  </View>
+                ))
+              )
+            )}
+
+            {activeBottomTab === 'recent' && (
+              recentBookingsList.map((item) => (
+                <View key={item.id} style={styles.opsListItem}>
+                  <View style={[styles.opsIconCircle, { backgroundColor: '#EFF6FF' }]}>
+                    <Icon name="calendar" size={16} color="#2563EB" />
+                  </View>
+                  <View style={styles.opsItemInfo}>
+                    <Text style={styles.opsItemTitle}>{item.guestName} ({item.bookingReference})</Text>
+                    <Text style={styles.opsItemSub}>
+                      {item.checkInDate} to {item.checkOutDate} • Room {item.roomNumber || 'TBD'}
+                    </Text>
+                  </View>
+                  <Badge label={item.status.toUpperCase()} variant="primary" size="sm" />
+                </View>
+              ))
+            )}
+          </View>
+        </View>
+
+        {/* 14 ADMIN NAVIGATION MODULES */}
+        <Text style={[styles.sectionHeader, { marginTop: spacing.xl }]}>
           Admin Management Modules ({adminModules.length})
+        </Text>
+        <Text style={styles.sectionSubtitle}>
+          Full operational control for front desk, inventory, billing, events, and staff
         </Text>
 
         <View style={styles.modulesGrid}>
@@ -529,11 +723,39 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     marginTop: 1,
   },
+  mainSectionLayout: {
+    flexDirection: 'column',
+    gap: 16,
+  },
+  mainDesktopLayout: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+  },
+  metricsCol: {
+    flex: 1,
+  },
+  metricsDesktopCol: {
+    flex: 1.1,
+  },
+  calendarCol: {
+    flex: 1,
+  },
+  calendarDesktopCol: {
+    flex: 1.35,
+  },
+  sectionHeaderRow: {
+    marginBottom: spacing.sm,
+  },
   sectionHeader: {
     ...typography.h3,
     color: colors.textPrimary,
-    marginBottom: spacing.sm,
-    paddingHorizontal: 2,
+    fontWeight: '700',
+  },
+  sectionSubtitle: {
+    fontSize: 12,
+    color: colors.textSecondary,
+    marginTop: 2,
+    marginBottom: spacing.xs,
   },
   kpiGrid: {
     flexDirection: 'row',
@@ -544,8 +766,90 @@ const styles = StyleSheet.create({
     width: '50%',
     padding: spacing.xs,
   },
+  financialRow: {
+    flexDirection: 'row',
+    marginHorizontal: -spacing.xs,
+    marginTop: spacing.xs,
+  },
+  finCol: {
+    flex: 1,
+    padding: spacing.xs,
+  },
+  operationsSection: {
+    marginTop: spacing.lg,
+  },
+  opsTabRow: {
+    flexDirection: 'row',
+    backgroundColor: '#F1F5F9',
+    borderRadius: borderRadius.md,
+    padding: 3,
+    marginBottom: spacing.sm,
+  },
+  opsTab: {
+    flex: 1,
+    paddingVertical: 8,
+    alignItems: 'center',
+    borderRadius: borderRadius.sm,
+  },
+  opsTabActive: {
+    backgroundColor: '#FFFFFF',
+    ...shadows.sm,
+  },
+  opsTabText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: colors.textSecondary,
+  },
+  opsTabTextActive: {
+    color: colors.primaryNavy,
+    fontWeight: '700',
+  },
+  opsContentCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: borderRadius.lg,
+    padding: spacing.md,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    ...shadows.sm,
+  },
+  opsEmptyText: {
+    textAlign: 'center',
+    color: colors.textMuted,
+    fontSize: 13,
+    paddingVertical: 16,
+  },
+  opsListItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F8FAFC',
+  },
+  opsIconCircle: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#ECFDF5',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  opsItemInfo: {
+    flex: 1,
+  },
+  opsItemTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: colors.textPrimary,
+  },
+  opsItemSub: {
+    fontSize: 12,
+    color: colors.textSecondary,
+    marginTop: 2,
+  },
   modulesGrid: {
     gap: spacing.sm,
+    marginTop: spacing.sm,
   },
   moduleCard: {
     flexDirection: 'row',

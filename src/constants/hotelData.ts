@@ -42,6 +42,7 @@ export const MOCK_KPIS: DashboardKPIs = {
   maintenanceRooms: 4,
   todayCheckIns: 18,
   todayCheckOuts: 14,
+  todayBookings: 22,
   occupancyPercentage: 65,
 };
 

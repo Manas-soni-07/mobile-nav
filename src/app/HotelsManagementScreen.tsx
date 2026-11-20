@@ -4,7 +4,7 @@
  * Initially manages: 1. THE VILLA | 2. NAVKAR PALACE & RESORT
  */
 
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -16,6 +16,7 @@ import {
   Alert,
   KeyboardAvoidingView,
   Platform,
+  ActivityIndicator,
 } from 'react-native';
 import { colors } from '../theme/colors';
 import { typography } from '../theme/typography';
@@ -29,14 +30,34 @@ import { Icon } from '../components/common/Icon';
 import { Input } from '../components/common/Input';
 import { Button } from '../components/common/Button';
 import { HotelSummary } from '../types/hotel';
+import { apiClient } from '../services/apiClient';
 
 export const HotelsManagementScreen: React.FC = () => {
   const { navigate, goBack } = useNavigation();
-  const { hotels, switchHotel, selectedHotelId } = useHotel();
+  const { hotels, switchHotel, selectedHotelId, refresh } = useHotel();
 
   const [hotelList, setHotelList] = useState<HotelSummary[]>(hotels);
+  const [loading, setLoading] = useState<boolean>(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [modalVisible, setModalVisible] = useState(false);
   const [editingHotel, setEditingHotel] = useState<HotelSummary | null>(null);
+
+  const fetchHotels = useCallback(async () => {
+    setLoading(true);
+    setLoadError(null);
+    try {
+      const data = await apiClient.getHotels();
+      setHotelList(data);
+    } catch (err: any) {
+      setLoadError(err.message || 'Failed to load hotels from database');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchHotels();
+  }, [fetchHotels]);
 
   // Form states
   const [name, setName] = useState('');
@@ -83,70 +104,61 @@ export const HotelsManagementScreen: React.FC = () => {
     setModalVisible(true);
   };
 
-  const handleSaveHotel = () => {
+  const handleSaveHotel = async () => {
     if (!name.trim()) {
       Alert.alert('Required Field', 'Please enter hotel name');
       return;
     }
 
-    if (editingHotel) {
-      // Update existing hotel
-      setHotelList((prev) =>
-        prev.map((h) =>
-          h.id === editingHotel.id
-            ? {
-                ...h,
-                name,
-                code: code || h.code,
-                location: `${address}, ${city}, ${state}`,
-                address,
-                city,
-                state,
-                contactPhone,
-                contactEmail,
-                checkInTime,
-                checkOutTime,
-                totalRooms: parseInt(totalRooms, 10) || h.totalRooms,
-                status,
-              }
-            : h
-        )
-      );
-    } else {
-      // Create new hotel
-      const newHotel: HotelSummary = {
-        id: `h-${Date.now()}`,
-        name,
-        code: code || `HTL-0${hotelList.length + 1}`,
-        location: `${address}, ${city}, ${state}`,
-        address,
-        city,
-        state,
-        starRating: 4,
-        totalRooms: parseInt(totalRooms, 10) || 20,
-        contactPhone,
-        contactEmail,
-        managerName: 'Unassigned',
-        currency: 'INR',
-        tagline: 'ResortOS Managed Property',
-        checkInTime,
-        checkOutTime,
-        status,
-      };
-      setHotelList((prev) => [...prev, newHotel]);
+    try {
+      if (editingHotel) {
+        await apiClient.updateHotel(editingHotel.id, {
+          name,
+          code: code || editingHotel.code,
+          address,
+          city,
+          state,
+          contactPhone,
+          contactEmail,
+          checkInTime,
+          checkOutTime,
+          totalRooms: parseInt(totalRooms, 10) || editingHotel.totalRooms,
+          status,
+        });
+        Alert.alert('Success', 'Hotel details updated in database');
+      } else {
+        await apiClient.createHotel({
+          name,
+          code: code || `HTL-0${hotelList.length + 1}`,
+          address,
+          city,
+          state,
+          contactPhone,
+          contactEmail,
+          checkInTime,
+          checkOutTime,
+          totalRooms: parseInt(totalRooms, 10) || 20,
+          status,
+        });
+        Alert.alert('Success', 'New hotel created in database');
+      }
+      setModalVisible(false);
+      await fetchHotels();
+      await refresh();
+    } catch (err: any) {
+      Alert.alert('Save Error', err.message || 'Failed to persist hotel records');
     }
-
-    setModalVisible(false);
   };
 
-  const toggleHotelStatus = (hotelId: string) => {
-    setHotelList((prev) =>
-      prev.map((h) =>
-        h.id === hotelId
-          ? { ...h, status: h.status === 'active' ? 'inactive' : 'active' }
-          : h
-      )
-    );
+  const toggleHotelStatus = async (hotel: HotelSummary) => {
+    const nextStatus = hotel.status === 'active' ? 'inactive' : 'active';
+    try {
+      await apiClient.updateHotel(hotel.id, { status: nextStatus });
+      await fetchHotels();
+      await refresh();
+    } catch (err: any) {
+      Alert.alert('Status Error', err.message || 'Failed to toggle hotel status');
+    }
   };
 
   return (
@@ -186,107 +198,124 @@ export const HotelsManagementScreen: React.FC = () => {
         </View>
 
         {/* Hotel Cards List */}
-        {hotelList.map((hotel) => {
-          const isActive = hotel.status !== 'inactive';
-          const isSelected = selectedHotelId === hotel.id;
+        {loading ? (
+          <View style={styles.centerBox}>
+            <ActivityIndicator size="large" color={colors.primaryNavy} />
+            <Text style={styles.loadingText}>Loading properties from database...</Text>
+          </View>
+        ) : loadError ? (
+          <View style={styles.errorBox}>
+            <Icon name="alert-circle" size={32} color={colors.error} />
+            <Text style={styles.errorText}>{loadError}</Text>
+            <Button title="Retry" size="sm" variant="outline" onPress={fetchHotels} style={{ marginTop: 8 }} />
+          </View>
+        ) : hotelList.length === 0 ? (
+          <View style={styles.emptyBox}>
+            <Text style={styles.emptyText}>No hotel properties found in database.</Text>
+          </View>
+        ) : (
+          hotelList.map((hotel) => {
+            const isActive = hotel.status !== 'inactive';
+            const isSelected = selectedHotelId === hotel.id;
 
-          return (
-            <Card key={hotel.id} padding="lg" variant="elevated" style={styles.hotelCard}>
-              <View style={styles.hotelHeader}>
-                <View style={styles.hotelIdentity}>
-                  <View style={styles.hotelAvatar}>
-                    <Icon name="hotel" size={24} color={colors.primaryNavy} />
+            return (
+              <Card key={hotel.id} padding="lg" variant="elevated" style={styles.hotelCard}>
+                <View style={styles.hotelHeader}>
+                  <View style={styles.hotelIdentity}>
+                    <View style={styles.hotelAvatar}>
+                      <Icon name="hotel" size={24} color={colors.primaryNavy} />
+                    </View>
+                    <View style={styles.hotelTitleBlock}>
+                      <Text style={styles.hotelName}>{hotel.name}</Text>
+                      <Text style={styles.hotelCode}>Code: {hotel.code}</Text>
+                    </View>
                   </View>
-                  <View style={styles.hotelTitleBlock}>
-                    <Text style={styles.hotelName}>{hotel.name}</Text>
-                    <Text style={styles.hotelCode}>Code: {hotel.code}</Text>
+
+                  <View style={styles.badgeRow}>
+                    {isSelected && (
+                      <Badge label="ACTIVE VIEW" variant="primary" size="sm" style={styles.badgeMargin} />
+                    )}
+                    <Badge
+                      label={isActive ? 'ACTIVE' : 'INACTIVE'}
+                      variant={isActive ? 'success' : 'error'}
+                      size="sm"
+                    />
+                  </View>
+                </View>
+
+                {/* Hotel Details Grid */}
+                <View style={styles.detailsGrid}>
+                  <View style={styles.detailItem}>
+                    <Icon name="map-pin" size={14} color={colors.textSecondary} />
+                    <Text style={styles.detailText} numberOfLines={2}>
+                      {hotel.address || hotel.location}
+                    </Text>
+                  </View>
+
+                  <View style={styles.detailItem}>
+                    <Icon name="phone" size={14} color={colors.textSecondary} />
+                    <Text style={styles.detailText}>{hotel.contactPhone}</Text>
+                  </View>
+
+                  <View style={styles.rowSpecs}>
+                    <View style={styles.specBox}>
+                      <Text style={styles.specLabel}>Total Rooms</Text>
+                      <Text style={styles.specValue}>{hotel.totalRooms}</Text>
+                    </View>
+                    <View style={styles.specBox}>
+                      <Text style={styles.specLabel}>Check-In</Text>
+                      <Text style={styles.specValue}>{hotel.checkInTime || '12:00 PM'}</Text>
+                    </View>
+                    <View style={styles.specBox}>
+                      <Text style={styles.specLabel}>Check-Out</Text>
+                      <Text style={styles.specValue}>{hotel.checkOutTime || '11:00 AM'}</Text>
+                    </View>
+                    <View style={styles.specBox}>
+                      <Text style={styles.specLabel}>Currency</Text>
+                      <Text style={styles.specValue}>INR (₹)</Text>
+                    </View>
                   </View>
                 </View>
 
-                <View style={styles.badgeRow}>
-                  {isSelected && (
-                    <Badge label="ACTIVE VIEW" variant="primary" size="sm" style={styles.badgeMargin} />
-                  )}
-                  <Badge
-                    label={isActive ? 'ACTIVE' : 'INACTIVE'}
-                    variant={isActive ? 'success' : 'error'}
-                    size="sm"
-                  />
-                </View>
-              </View>
-
-              {/* Hotel Details Grid */}
-              <View style={styles.detailsGrid}>
-                <View style={styles.detailItem}>
-                  <Icon name="map-pin" size={14} color={colors.textSecondary} />
-                  <Text style={styles.detailText} numberOfLines={2}>
-                    {hotel.address || hotel.location}
-                  </Text>
-                </View>
-
-                <View style={styles.detailItem}>
-                  <Icon name="phone" size={14} color={colors.textSecondary} />
-                  <Text style={styles.detailText}>{hotel.contactPhone}</Text>
-                </View>
-
-                <View style={styles.rowSpecs}>
-                  <View style={styles.specBox}>
-                    <Text style={styles.specLabel}>Total Rooms</Text>
-                    <Text style={styles.specValue}>{hotel.totalRooms}</Text>
-                  </View>
-                  <View style={styles.specBox}>
-                    <Text style={styles.specLabel}>Check-In</Text>
-                    <Text style={styles.specValue}>{hotel.checkInTime || '12:00 PM'}</Text>
-                  </View>
-                  <View style={styles.specBox}>
-                    <Text style={styles.specLabel}>Check-Out</Text>
-                    <Text style={styles.specValue}>{hotel.checkOutTime || '11:00 AM'}</Text>
-                  </View>
-                  <View style={styles.specBox}>
-                    <Text style={styles.specLabel}>Currency</Text>
-                    <Text style={styles.specValue}>INR (₹)</Text>
-                  </View>
-                </View>
-              </View>
-
-              {/* Action Buttons */}
-              <View style={styles.actionsRow}>
-                <TouchableOpacity
-                  style={[styles.actionBtn, styles.editBtn]}
-                  onPress={() => openEditModal(hotel)}
-                >
-                  <Icon name="edit" size={14} color={colors.primaryNavy} />
-                  <Text style={styles.editBtnText}>Edit Hotel</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  style={[styles.actionBtn, styles.switchBtn]}
-                  onPress={() => {
-                    switchHotel(hotel.id);
-                    navigate('admin-dashboard');
-                  }}
-                >
-                  <Icon name="eye" size={14} color="#047857" />
-                  <Text style={styles.switchBtnText}>Open Dashboard</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  style={[
-                    styles.actionBtn,
-                    isActive ? styles.deactivateBtn : styles.activateBtn,
-                  ]}
-                  onPress={() => toggleHotelStatus(hotel.id)}
-                >
-                  <Text
-                    style={isActive ? styles.deactivateText : styles.activateText}
+                {/* Action Buttons */}
+                <View style={styles.actionsRow}>
+                  <TouchableOpacity
+                    style={[styles.actionBtn, styles.editBtn]}
+                    onPress={() => openEditModal(hotel)}
                   >
-                    {isActive ? 'Deactivate' : 'Activate'}
-                  </Text>
-                </TouchableOpacity>
-              </View>
-            </Card>
-          );
-        })}
+                    <Icon name="edit" size={14} color={colors.primaryNavy} />
+                    <Text style={styles.editBtnText}>Edit Hotel</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={[styles.actionBtn, styles.switchBtn]}
+                    onPress={() => {
+                      switchHotel(hotel.id);
+                      navigate('admin-dashboard');
+                    }}
+                  >
+                    <Icon name="eye" size={14} color="#047857" />
+                    <Text style={styles.switchBtnText}>Open Dashboard</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={[
+                      styles.actionBtn,
+                      isActive ? styles.deactivateBtn : styles.activateBtn,
+                    ]}
+                    onPress={() => toggleHotelStatus(hotel)}
+                  >
+                    <Text
+                      style={isActive ? styles.deactivateText : styles.activateText}
+                    >
+                      {isActive ? 'Deactivate' : 'Activate'}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              </Card>
+            );
+          })
+        )}
       </ScrollView>
 
       {/* Add / Edit Hotel Modal */}
@@ -675,6 +704,39 @@ const styles = StyleSheet.create({
   modalSaveBtn: {
     marginTop: spacing.md,
     marginBottom: spacing.md,
+  },
+  centerBox: {
+    padding: spacing.xl,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  loadingText: {
+    ...typography.caption,
+    color: colors.textSecondary,
+    marginTop: spacing.sm,
+  },
+  errorBox: {
+    padding: spacing.lg,
+    alignItems: 'center',
+    backgroundColor: '#FEF2F2',
+    borderRadius: borderRadius.md,
+    borderWidth: 1,
+    borderColor: '#FECACA',
+    marginVertical: spacing.md,
+  },
+  errorText: {
+    ...typography.caption,
+    color: colors.error,
+    textAlign: 'center',
+    marginTop: spacing.xs,
+  },
+  emptyBox: {
+    padding: spacing.xl,
+    alignItems: 'center',
+  },
+  emptyText: {
+    ...typography.caption,
+    color: colors.textMuted,
   },
 });
 
