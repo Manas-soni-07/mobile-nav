@@ -6,13 +6,13 @@ async function measure() {
   const server = http.createServer(app);
   await new Promise((res) => server.listen(5094, '0.0.0.0', res));
   try {
-    console.log('=== Performance & Response Time Benchmark (over LAN 192.168.0.104) ===\n');
+    console.log('=== Performance & Response Time Benchmark (over LAN 192.168.1.26) ===\n');
 
     // 1. Admin Login
     let adminToken = '';
     for (let i = 1; i <= 3; i++) {
       const start = Date.now();
-      const res = await fetch('http://192.168.0.104:5094/api/auth/login', {
+      const res = await fetch('http://192.168.1.26:5094/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -30,7 +30,7 @@ async function measure() {
     // 2. Manager Login
     for (let i = 1; i <= 3; i++) {
       const start = Date.now();
-      const res = await fetch('http://192.168.0.104:5094/api/auth/login', {
+      const res = await fetch('http://192.168.1.26:5094/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -47,7 +47,7 @@ async function measure() {
     // 3. Hotel Listing
     {
       const start = Date.now();
-      const res = await fetch('http://192.168.0.104:5094/api/hotels', {
+      const res = await fetch('http://192.168.1.26:5094/api/hotels', {
         headers: {
           'Authorization': `Bearer ${adminToken}`,
           'x-user-role': 'ADMIN',
@@ -61,7 +61,7 @@ async function measure() {
     // 4. Dashboard KPIs
     {
       const start = Date.now();
-      const res = await fetch('http://192.168.0.104:5094/api/dashboard/kpis?hotelId=h-villa', {
+      const res = await fetch('http://192.168.1.26:5094/api/dashboard/kpis?hotelId=h-villa', {
         headers: {
           'Authorization': `Bearer ${adminToken}`,
           'x-user-role': 'ADMIN',

@@ -129,7 +129,7 @@ export const CloudSyncScreen: React.FC = () => {
           </View>
           <Text style={styles.networkEndpoint}>{cloudSyncService.getBaseUrl()}</Text>
           <Text style={styles.networkSub}>
-            Physical Device • Wi-Fi LAN IP (192.168.0.104:5000)
+            Physical Device • Wi-Fi LAN IP (192.168.1.26:5000)
           </Text>
         </View>
 

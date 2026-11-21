@@ -73,7 +73,7 @@ if (require.main === module) {
     console.log(`🚀 ResortOS TiDB Cloud API Server listening on port ${PORT}`);
     console.log(`📡 Bound Interface:  ${HOST} (Available across Wi-Fi LAN)`);
     console.log(`💻 Local Host:       http://localhost:${PORT}/api/health`);
-    console.log(`📱 Android Phone:    http://192.168.0.104:${PORT}/api/health`);
+    console.log(`📱 Android Phone:    http://192.168.1.26:${PORT}/api/health`);
     console.log(`=======================================================`);
   });
 }

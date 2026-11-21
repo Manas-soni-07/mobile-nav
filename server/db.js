@@ -6,21 +6,49 @@
 const mysql = require('mysql2/promise');
 require('dotenv').config();
 
-const rawUrl = process.env.DATABASEURL || process.env.DATABASE_URL || "";
+const rawUrl = process.env.DATABASE_URL || process.env.DATABASEURL || "";
 if (!rawUrl) {
-  console.warn("⚠️ Warning: DATABASEURL environment variable is not defined.");
+  console.warn("⚠️ Warning: DATABASE_URL / DATABASEURL environment variable is not defined.");
 }
-const targetDbUrl = rawUrl.replace(/\/sys$/, '/resortos');
 
-const pool = mysql.createPool({
-  uri: targetDbUrl,
-  ssl: {
-    rejectUnauthorized: true,
-  },
-  waitForConnections: true,
-  connectionLimit: 10,
-  queueLimit: 0,
-});
+let poolConfig;
+try {
+  const u = new URL(rawUrl);
+  let dbName = u.pathname.replace(/^\//, '') || 'resortos';
+  if (dbName === 'sys') dbName = 'resortos';
+
+  poolConfig = {
+    host: u.hostname,
+    port: parseInt(u.port, 10) || 4000,
+    user: decodeURIComponent(u.username),
+    password: decodeURIComponent(u.password),
+    database: dbName,
+    ssl: {
+      minVersion: 'TLSv1.2',
+      rejectUnauthorized: true,
+    },
+    waitForConnections: true,
+    connectionLimit: 10,
+    queueLimit: 0,
+    connectTimeout: 15000,
+    enableKeepAlive: true,
+    keepAliveInitialDelay: 10000,
+  };
+} catch {
+  const targetDbUrl = rawUrl.replace(/\/sys(?=[/?#]|$)/, '/resortos');
+  poolConfig = {
+    uri: targetDbUrl,
+    ssl: {
+      minVersion: 'TLSv1.2',
+      rejectUnauthorized: true,
+    },
+    waitForConnections: true,
+    connectionLimit: 10,
+    queueLimit: 0,
+  };
+}
+
+const pool = mysql.createPool(poolConfig);
 
 // Database query duration logging wrapper (Zero passwords/secrets logged)
 const originalQuery = pool.query.bind(pool);

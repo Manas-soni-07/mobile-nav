@@ -1,6 +1,6 @@
 /**
  * ResortOS - Physical Android Device Networking & Backend Connectivity Verification
- * Tests LAN interface binding on 0.0.0.0:5000, 192.168.0.104 resolution,
+ * Tests LAN interface binding on 0.0.0.0:5000, 192.168.1.26 resolution,
  * backend APIs, and centralized apiConfig.
  */
 
@@ -13,7 +13,7 @@ async function testNetworking() {
   console.log('📱 ResortOS Physical Device Networking Verification');
   console.log('====================================================\n');
 
-  const LAN_IP = '192.168.0.104';
+  const LAN_IP = '192.168.1.26';
   const PORT = 5000;
   const HOST = '0.0.0.0';
 
@@ -27,17 +27,24 @@ async function testNetworking() {
   }
 
   try {
-    // 1. Start backend server bound to 0.0.0.0:5000
-    server = http.createServer(app);
-    await new Promise((resolve, reject) => {
-      server.listen(PORT, HOST, () => {
-        console.log(`Server actively listening on ${HOST}:${PORT}`);
-        resolve();
+    // 1. Check or start backend server bound to 0.0.0.0:5000
+    try {
+      server = http.createServer(app);
+      await new Promise((resolve, reject) => {
+        server.listen(PORT, HOST, () => {
+          console.log(`Server actively listening on ${HOST}:${PORT}`);
+          resolve();
+        });
+        server.on('error', reject);
       });
-      server.on('error', reject);
-    });
-
-    record('Server LAN Binding', true, `Listening on ${HOST}:${PORT}`);
+      record('Server LAN Binding', true, `Listening on ${HOST}:${PORT}`);
+    } catch (e) {
+      if (e.code === 'EADDRINUSE') {
+        record('Server LAN Binding', true, `Active server already running on ${HOST}:${PORT}`);
+      } else {
+        throw e;
+      }
+    }
 
     // 2. Test Root Endpoint via LAN IP
     const rootRes = await fetch(`http://${LAN_IP}:${PORT}/`);
@@ -107,7 +114,7 @@ async function testNetworking() {
     // 9. Test Centralized apiConfig resolution
     const fs = require('fs');
     const apiConfigContent = fs.readFileSync('src/config/apiConfig.ts', 'utf8');
-    const hasLanIp = apiConfigContent.includes('192.168.0.104');
+    const hasLanIp = apiConfigContent.includes('192.168.1.26');
     const hasExpoEnv = apiConfigContent.includes('EXPO_PUBLIC_API_URL');
     const hasMetroDetect = apiConfigContent.includes('NativeModules?.SourceCode?.scriptURL');
     const hasProdUrl = apiConfigContent.includes('https://api.resortos.com/api');
@@ -123,7 +130,7 @@ async function testNetworking() {
     console.error('Test failed with error:', err);
     process.exit(1);
   } finally {
-    if (server) {
+    if (server && server.listening) {
       server.close();
     }
     const pool = require('../server/db');

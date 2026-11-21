@@ -24,7 +24,7 @@ export interface NetworkConfig {
 
 // Default development configuration
 export const DEFAULT_PORT = 5000;
-export const DEFAULT_DEV_LAN_IP = '192.168.0.104'; // Development PC local IPv4 address
+export const DEFAULT_DEV_LAN_IP = '192.168.1.26'; // Development PC local IPv4 address
 export const PRODUCTION_API_URL = 'https://api.resortos.com/api';
 
 class ApiConfigurationManager {
@@ -33,7 +33,7 @@ class ApiConfigurationManager {
   /**
    * Automatically resolve the development machine's IP address from Metro bundler's scriptURL.
    * When Expo loads the JS bundle on a physical phone, NativeModules.SourceCode.scriptURL contains
-   * the exact IP of the PC (e.g., http://192.168.0.104:8081/index.bundle...).
+   * the exact IP of the PC (e.g., http://192.168.1.26:8081/index.bundle...).
    */
   private getMetroHost(): string | null {
     try {
@@ -108,7 +108,19 @@ class ApiConfigurationManager {
       };
     }
 
-    // 5. Physical Android Device & Local LAN fallback
+    // 5. Web Browser host detection
+    if (Platform.OS === 'web' && typeof window !== 'undefined' && window.location?.hostname) {
+      const webHost = window.location.hostname || 'localhost';
+      return {
+        baseUrl: `http://${webHost}:${DEFAULT_PORT}/api`,
+        host: webHost,
+        port: DEFAULT_PORT,
+        isProduction: false,
+        source: 'METRO_AUTO_DETECT',
+      };
+    }
+
+    // 6. Physical Android Device & Local LAN fallback
     // When running on Android, connect to the developer machine's local LAN IP
     if (Platform.OS === 'android') {
       return {
@@ -120,7 +132,7 @@ class ApiConfigurationManager {
       };
     }
 
-    // 6. Web / iOS Simulator fallback
+    // 7. General fallback
     return {
       baseUrl: `http://localhost:${DEFAULT_PORT}/api`,
       host: 'localhost',
@@ -131,7 +143,7 @@ class ApiConfigurationManager {
   }
 
   /**
-   * Returns the resolved API Base URL (e.g., http://192.168.0.104:5000/api)
+   * Returns the resolved API Base URL (e.g., http://192.168.1.26:5000/api)
    */
   public getBaseUrl(): string {
     return this.getConfig().baseUrl;

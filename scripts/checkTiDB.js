@@ -2,20 +2,27 @@ const mysql = require('mysql2/promise');
 require('dotenv').config();
 
 async function checkDatabase() {
-  const url = process.env.DATABASEURL || process.env.DATABASE_URL;
+  const url = process.env.DATABASE_URL || process.env.DATABASEURL;
   if (!url) {
-    console.error("Error: DATABASEURL environment variable is required.");
+    console.error("Error: DATABASE_URL environment variable is required.");
     return;
   }
-  // Switch URL to resortos database
-  const resortOsUrl = url.replace(/\/sys$/, '/resortos');
 
   console.log("Connecting to TiDB Cloud 'resortos' database...");
 
   try {
+    const u = new URL(url);
+    let dbName = u.pathname.replace(/^\//, '') || 'resortos';
+    if (dbName === 'sys') dbName = 'resortos';
+
     const connection = await mysql.createConnection({
-      uri: resortOsUrl,
+      host: u.hostname,
+      port: parseInt(u.port, 10) || 4000,
+      user: decodeURIComponent(u.username),
+      password: decodeURIComponent(u.password),
+      database: dbName,
       ssl: {
+        minVersion: 'TLSv1.2',
         rejectUnauthorized: true,
       },
     });

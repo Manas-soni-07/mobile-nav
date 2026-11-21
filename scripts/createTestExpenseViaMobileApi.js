@@ -1,7 +1,7 @@
 require('dotenv').config();
 
 async function main() {
-  const API_BASE = 'http://192.168.0.104:5000/api';
+  const API_BASE = 'http://192.168.1.26:5000/api';
   console.log('Connecting to Mobile API Backend at:', API_BASE);
 
   // 1. Mobile App Login Flow
