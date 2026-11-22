@@ -11,6 +11,7 @@
  */
 
 import { Platform, NativeModules } from 'react-native';
+import Constants from 'expo-constants';
 
 export type NetworkSource = 'EXPO_PUBLIC' | 'METRO_AUTO_DETECT' | 'LAN_FALLBACK' | 'EMULATOR' | 'PRODUCTION';
 
@@ -24,20 +25,40 @@ export interface NetworkConfig {
 
 // Default development configuration
 export const DEFAULT_PORT = 5000;
-export const DEFAULT_DEV_LAN_IP = '192.168.1.26'; // Development PC local IPv4 address
+export const DEFAULT_DEV_LAN_IP = '192.168.1.5'; // Current development machine local IPv4 address
 export const PRODUCTION_API_URL = 'https://api.resortos.com/api';
 
 class ApiConfigurationManager {
   private runtimeBaseUrlOverride: string | null = null;
 
   /**
-   * Automatically resolve the development machine's IP address from Metro bundler's scriptURL.
-   * When Expo loads the JS bundle on a physical phone, NativeModules.SourceCode.scriptURL contains
-   * the exact IP of the PC (e.g., http://192.168.1.26:8081/index.bundle...).
+   * Automatically resolve the development machine's IP address dynamically.
+   * Priority:
+   * 1. Expo Constants hostUri (most reliable on physical Android/iOS devices running Expo Go / Dev Client).
+   * 2. React Native SourceCode TurboModule scriptURL.
+   * 3. Legacy NativeModules SourceCode scriptURL.
    */
   private getMetroHost(): string | null {
     try {
-      const scriptURL: string | undefined = NativeModules?.SourceCode?.scriptURL;
+      // 1. Expo Constants hostUri (e.g., "192.168.1.5:8081")
+      const expoHostUri =
+        Constants?.expoConfig?.hostUri ||
+        (Constants as any)?.manifest?.debuggerHost ||
+        (Constants as any)?.manifest2?.extra?.expoClient?.hostUri;
+
+      if (expoHostUri && typeof expoHostUri === 'string') {
+        const host = expoHostUri.split(':')[0];
+        if (host && host !== 'localhost' && host !== '127.0.0.1') {
+          return host;
+        }
+      }
+
+      // 2. React Native TurboModules & NativeModules SourceCode
+      const sourceCodeModule = (NativeModules as any)?.SourceCode;
+      const scriptURL: string | undefined =
+        sourceCodeModule?.getConstants?.()?.scriptURL ||
+        sourceCodeModule?.scriptURL;
+
       if (scriptURL && typeof scriptURL === 'string') {
         const afterProtocol = scriptURL.split('://')[1];
         if (afterProtocol) {
@@ -49,7 +70,7 @@ class ApiConfigurationManager {
         }
       }
     } catch {
-      // Fall through to other detection mechanisms
+      // Fall through to fallback mechanisms
     }
     return null;
   }
@@ -83,28 +104,34 @@ class ApiConfigurationManager {
       };
     }
 
-    // 3. Explicit environment variable (EXPO_PUBLIC_API_URL in .env)
+    // 3. Dynamic Metro host detection in development on native physical devices
+    // On physical mobile devices, the Metro host is guaranteed to match the host PC's current local Wi-Fi IP.
+    if (__DEV__ && Platform.OS !== 'web') {
+      const metroHost = this.getMetroHost();
+      if (metroHost) {
+        return {
+          baseUrl: `http://${metroHost}:${DEFAULT_PORT}/api`,
+          host: metroHost,
+          port: DEFAULT_PORT,
+          isProduction: false,
+          source: 'METRO_AUTO_DETECT',
+        };
+      }
+    }
+
+    // 4. Explicit environment variable (EXPO_PUBLIC_API_URL in .env)
     const envUrl = process.env.EXPO_PUBLIC_API_URL;
     if (envUrl && envUrl.trim().length > 0) {
-      const cleanUrl = envUrl.trim().replace(/\/+$/, '');
+      let cleanUrl = envUrl.trim().replace(/\/+$/, '');
+      if (!cleanUrl.endsWith('/api')) {
+        cleanUrl = `${cleanUrl}/api`;
+      }
       return {
         baseUrl: cleanUrl,
         host: 'env',
         port: DEFAULT_PORT,
         isProduction: false,
         source: 'EXPO_PUBLIC',
-      };
-    }
-
-    // 4. Dynamic Metro host detection (works automatically on physical devices)
-    const metroHost = this.getMetroHost();
-    if (metroHost) {
-      return {
-        baseUrl: `http://${metroHost}:${DEFAULT_PORT}/api`,
-        host: metroHost,
-        port: DEFAULT_PORT,
-        isProduction: false,
-        source: 'METRO_AUTO_DETECT',
       };
     }
 
@@ -121,7 +148,6 @@ class ApiConfigurationManager {
     }
 
     // 6. Physical Android Device & Local LAN fallback
-    // When running on Android, connect to the developer machine's local LAN IP
     if (Platform.OS === 'android') {
       return {
         baseUrl: `http://${DEFAULT_DEV_LAN_IP}:${DEFAULT_PORT}/api`,
@@ -143,7 +169,7 @@ class ApiConfigurationManager {
   }
 
   /**
-   * Returns the resolved API Base URL (e.g., http://192.168.1.26:5000/api)
+   * Returns the resolved API Base URL (e.g., http://192.168.1.3:5000/api)
    */
   public getBaseUrl(): string {
     return this.getConfig().baseUrl;

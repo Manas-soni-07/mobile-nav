@@ -10,20 +10,34 @@ import { colors } from '../theme/colors';
 import { typography } from '../theme/typography';
 import { spacing, borderRadius, shadows } from '../theme/spacing';
 import { useNavigation } from '../hooks/useNavigation';
+import { useHotel } from '../hooks/useHotel';
 import { Button } from '../components/common/Button';
 import { Icon } from '../components/common/Icon';
 
 export const SplashScreen: React.FC = () => {
   const { navigate } = useNavigation();
+  const { currentUser, isAuthInitializing } = useHotel();
 
   useEffect(() => {
-    // Simulated smooth initialization
+    if (isAuthInitializing) return;
+
     const timer = setTimeout(() => {
-      navigate('login');
-    }, 1500);
+      if (currentUser) {
+        if (currentUser.role === 'ADMIN') {
+          navigate('admin-dashboard', { role: 'admin' });
+        } else {
+          navigate('manager-dashboard', {
+            role: 'manager',
+            selectedHotelId: currentUser.hotelId || 'h-villa',
+          });
+        }
+      } else {
+        navigate('login');
+      }
+    }, 1200);
 
     return () => clearTimeout(timer);
-  }, []);
+  }, [currentUser, isAuthInitializing]);
 
   return (
     <SafeAreaView style={styles.safeArea}>

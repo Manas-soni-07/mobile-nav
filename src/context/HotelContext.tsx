@@ -45,11 +45,13 @@ import {
 } from '../types/hotel';
 import { hotelService } from '../services/hotelService';
 import { apiClient } from '../services/apiClient';
+import { authService } from '../services/authService';
 
 export interface HotelContextType {
   // Authentication & Session
   currentUser: CurrentUser | null;
   setCurrentUser: (user: CurrentUser | null) => void;
+  isAuthInitializing: boolean;
   login: (email: string, password: string, role?: string) => Promise<{ success: boolean; user?: CurrentUser; error?: string }>;
   logout: () => void;
 
@@ -140,13 +142,26 @@ export const HotelProvider: React.FC<HotelProviderProps> = ({
   const [error, setError] = useState<string | null>(null);
 
   // Authentication State
-  const [currentUser, setCurrentUser] = useState<CurrentUser | null>({
-    id: 'cmwgcs4ac0004bduoosyml101',
-    email: 'admin@resortos.com',
-    fullName: 'Vikramaditya Rathore (Admin Owner)',
-    role: 'ADMIN',
-    hotelId: null,
-  });
+  const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
+  const [isAuthInitializing, setIsAuthInitializing] = useState<boolean>(true);
+
+  // Restore persisted session from AsyncStorage on boot
+  useEffect(() => {
+    let isMounted = true;
+    authService.getStoredSession().then((session) => {
+      if (!isMounted) return;
+      if (session.user && session.token) {
+        setCurrentUser(session.user);
+        if (session.selectedHotelId) {
+          setSelectedHotelId(session.selectedHotelId);
+        }
+      }
+      setIsAuthInitializing(false);
+    });
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   // Database-backed Entity Collections
   const [hotels, setHotels] = useState<HotelSummary[]>([]);
@@ -166,7 +181,11 @@ export const HotelProvider: React.FC<HotelProviderProps> = ({
 
   // Configure auth on API client
   useEffect(() => {
-    apiClient.setAuth('resortos-active-session', currentUser);
+    if (currentUser) {
+      apiClient.setAuth('resortos-active-session', currentUser);
+    } else {
+      apiClient.setAuth(null, null);
+    }
   }, [currentUser]);
 
   // Main loader: pulls actual records from TiDB Cloud via backend API
@@ -215,6 +234,7 @@ export const HotelProvider: React.FC<HotelProviderProps> = ({
         return;
       }
       setSelectedHotelId(hotelId);
+      authService.saveSelectedHotelId(hotelId);
     },
     [currentUser]
   );
@@ -227,10 +247,9 @@ export const HotelProvider: React.FC<HotelProviderProps> = ({
       requestedRole?: string
     ): Promise<{ success: boolean; user?: CurrentUser; error?: string }> => {
       try {
-        const result = await apiClient.login(email, password, requestedRole);
+        const result = await authService.login(email, password, requestedRole);
         if (result.success && result.user) {
           setCurrentUser(result.user);
-          apiClient.setAuth(result.token, result.user);
           if (result.user.role === 'MANAGER' && result.user.hotelId) {
             setSelectedHotelId(result.user.hotelId);
           }
@@ -248,9 +267,9 @@ export const HotelProvider: React.FC<HotelProviderProps> = ({
     [loadDatabaseData]
   );
 
-  const logout = useCallback(() => {
+  const logout = useCallback(async () => {
+    await authService.clearSession();
     setCurrentUser(null);
-    apiClient.setAuth(null, null);
     setSelectedHotelId('h-villa');
   }, []);
 
@@ -616,6 +635,7 @@ export const HotelProvider: React.FC<HotelProviderProps> = ({
   const value: HotelContextType = {
     currentUser,
     setCurrentUser,
+    isAuthInitializing,
     login,
     logout,
     selectedHotelId,

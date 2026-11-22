@@ -67,13 +67,32 @@ app.get('/', (req, res) => {
   });
 });
 
+const os = require('os');
+
+function getLocalIpAddresses() {
+  const interfaces = os.networkInterfaces();
+  const addresses = [];
+  for (const name of Object.keys(interfaces)) {
+    for (const iface of interfaces[name]) {
+      if (iface.family === 'IPv4' && !iface.internal) {
+        addresses.push(iface.address);
+      }
+    }
+  }
+  return addresses;
+}
+
 if (require.main === module) {
   app.listen(PORT, HOST, () => {
+    const localIps = getLocalIpAddresses();
+    const primaryIp = localIps[0] || '127.0.0.1';
     console.log(`=======================================================`);
     console.log(`🚀 ResortOS TiDB Cloud API Server listening on port ${PORT}`);
     console.log(`📡 Bound Interface:  ${HOST} (Available across Wi-Fi LAN)`);
-    console.log(`💻 Local Host:       http://localhost:${PORT}/api/health`);
-    console.log(`📱 Android Phone:    http://192.168.1.26:${PORT}/api/health`);
+    console.log(`💻 Localhost:        http://localhost:${PORT}/api/health`);
+    for (const ip of localIps) {
+      console.log(`📱 Mobile/Wi-Fi:     http://${ip}:${PORT}/api/health`);
+    }
     console.log(`=======================================================`);
   });
 }
